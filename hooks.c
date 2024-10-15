@@ -8,7 +8,7 @@ static void set_##x(Tox *tox) { \
 }
 
 // Headers for the exported GO functions in hooks.go
-void hook_callback_self_connection_status(Tox*, TOX_CONNECTION, void*);
+void hook_callback_self_connection_status(Tox*, void*);
 void hook_callback_friend_name(Tox*, uint32_t, const uint8_t*, size_t, void*);
 void hook_callback_friend_status_message(Tox*, uint32_t, const uint8_t*, size_t, void*);
 void hook_callback_friend_status(Tox*, uint32_t, TOX_USER_STATUS, void*);
@@ -23,7 +23,7 @@ void hook_callback_file_recv(Tox*, uint32_t, uint32_t, uint32_t, uint64_t, const
 void hook_callback_file_recv_chunk(Tox*, uint32_t, uint32_t, uint64_t, const uint8_t*, size_t, void*);
 void hook_callback_friend_lossy_packet(Tox*, uint32_t, const uint8_t*, size_t, void*);
 void hook_callback_friend_lossless_packet(Tox*, uint32_t, const uint8_t*, size_t, void*);
-void hook_callback_conference_invite(Tox*, uint32_t, Tox_Conference_Type, const uint8_t*, size_t, void*);
+void hook_callback_conference_invite(Tox*, uint32_t, const uint8_t*, size_t, void*);
 
 CREATE_HOOK(callback_self_connection_status)
 CREATE_HOOK(callback_friend_name)

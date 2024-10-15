@@ -150,7 +150,7 @@ func onFriendMessage(t *dpc_tox.Tox, friendNumber uint32, messagetype dpc_tox.To
 		t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "Type '/help case' to use some internal function.")
 
 	case "11":
-		file, err := os.Open("/home/cy/godev/src/github.com/calvindc/dpc-tox/examples/response.png")
+		file, err := os.Open("./examples/response.png")
 		if err != nil {
 			defer file.Close()
 			t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "File not found. Please 'cd' into tox project")
@@ -191,7 +191,7 @@ func onFriendMessage(t *dpc_tox.Tox, friendNumber uint32, messagetype dpc_tox.To
 		if success {
 			t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "the new group build success, title is:"+title)
 		}
-		//邀请到我建立的所有群里
+		//test for invite to my room
 		myAllGroup, err := t.ConferenceGetChatlist()
 		if err != nil {
 			fmt.Println(fmt.Sprintf("ConferenceGetChatlist err=%v", err))
@@ -203,7 +203,7 @@ func onFriendMessage(t *dpc_tox.Tox, friendNumber uint32, messagetype dpc_tox.To
 			}
 			fmt.Println(fmt.Sprintf("ConferenceInvite invite [%d] into [%d] success,ret=%v", friendNumber, theGp, ret))
 		}
-	case "33": //查看所有群的成员情况
+	case "33": //check all peers info
 		myAllGroup, err := t.ConferenceGetChatlist()
 		if err != nil {
 			fmt.Println(fmt.Sprintf("ConferenceGetChatlist err=%v", err))
@@ -217,7 +217,7 @@ func onFriendMessage(t *dpc_tox.Tox, friendNumber uint32, messagetype dpc_tox.To
 			for peerNumber, pubKey := range groupPeersInfo {
 				fmt.Println(fmt.Sprintf("ConferenceGetPeers groupNubmber=%d, peerNumber=%d,peerPubkey=%s", theGp, peerNumber, pubKey))
 			}
-			t.ConferenceSendMessage(theGp, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "欢迎热烈讨论...^~^")
+			t.ConferenceSendMessage(theGp, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "welcome group...^~^")
 		}
 
 	default:
