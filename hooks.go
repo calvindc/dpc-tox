@@ -103,3 +103,8 @@ func hook_callback_conference_connected(t unsafe.Pointer, conferencenumber C.uin
 func hook_callback_conference_message(t unsafe.Pointer, conferencenumber C.uint32_t, peernumber C.uint32_t, messagetype C.Tox_Message_Type, message *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
 	(*Tox)(tox).onConferenceMessage((*Tox)(tox), uint32(conferencenumber), uint32(peernumber), ToxMessageType(messagetype), string(C.GoBytes(unsafe.Pointer(message), C.int(length))))
 }
+
+//export hook_callback_call
+func hook_callback_call(t unsafe.Pointer, friendnumber C.uint32_t, audioenabled C._Bool, videoenabled C._Bool, toxav unsafe.Pointer) {
+	(*ToxAV)(toxav).onCall((*ToxAV)(toxav), uint32(friendnumber), bool(audioenabled), bool(videoenabled))
+}

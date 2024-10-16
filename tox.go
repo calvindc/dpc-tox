@@ -1,16 +1,5 @@
 package dpc_tox
 
-/* gotox - a go wrapper for toxcore
- *
- * This work is based on the great work by organ
- * (https://github.com/organ/golibtox).
- *
- * Pull requests, bug reporting and feature request (via github issues) are
- * always welcome. :)
- *
- * For a list of supported toxcore features see PROGRESS.md.
- */
-
 //#cgo LDFLAGS: -ltoxcore
 //#include <tox/tox.h>
 import "C"

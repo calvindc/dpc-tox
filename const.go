@@ -1,6 +1,7 @@
 package dpc_tox
 
 //#include <tox/tox.h>
+//#include <tox/toxav.h>
 import "C"
 import "errors"
 
@@ -303,7 +304,9 @@ var (
 	ErrConferenceNewFailedInitialize = errors.New("conference instance failed to initialize")
 )
 
-type ToxErrConferenceNew C.Tox_Err_Conference_New
+// Conference
+
+type ToxErrConferenceNew C.TOX_ERR_CONFERENCE_NEW
 
 var (
 	TOX_ERR_CONFERENCE_NEW_OK   ToxErrConferenceNew = C.TOX_ERR_CONFERENCE_NEW_OK   //The function returned successfully.
@@ -315,14 +318,14 @@ var (
 	ErrConferenceDeleteConferenceNotFound = errors.New("the conference number passed did not designate a valid conference.")
 )
 
-type ToxErrConferenceDelete C.Tox_Err_Conference_Delete
+type ToxErrConferenceDelete C.TOX_ERR_CONFERENCE_DELETE
 
 var (
 	TOX_ERR_CONFERENCE_DELETE_OK                   ToxErrConferenceDelete = C.TOX_ERR_CONFERENCE_DELETE_OK
 	TOX_ERR_CONFERENCE_DELETE_CONFERENCE_NOT_FOUND ToxErrConferenceDelete = C.TOX_ERR_CONFERENCE_DELETE_CONFERENCE_NOT_FOUND //The conference number passed did not designate a valid conference.
 )
 
-type ToxErrConferencePeerQuery C.Tox_Err_Conference_Peer_Query
+type ToxErrConferencePeerQuery C.TOX_ERR_CONFERENCE_PEER_QUERY
 
 var (
 	TOX_ERR_CONFERENCE_PEER_QUERY_OK                   ToxErrConferencePeerQuery = C.TOX_ERR_CONFERENCE_PEER_QUERY_OK
@@ -337,7 +340,7 @@ var (
 	ErrConferenceInviteNoConnection       = errors.New("The client is not connected to the conference")
 )
 
-type ToxErrConferenceInvite C.Tox_Err_Conference_Invite
+type ToxErrConferenceInvite C.TOX_ERR_CONFERENCE_INVITE
 
 var (
 	TOX_ERR_CONFERENCE_INVITE_OK                   ToxErrConferenceInvite = C.TOX_ERR_CONFERENCE_INVITE_OK
@@ -346,7 +349,7 @@ var (
 	TOX_ERR_CONFERENCE_INVITE_NO_CONNECTION        ToxErrConferenceInvite = C.TOX_ERR_CONFERENCE_INVITE_NO_CONNECTION
 )
 
-type ToxErrConferenceSendMessage C.Tox_Err_Conference_Send_Message
+type ToxErrConferenceSendMessage C.TOX_ERR_CONFERENCE_SEND_MESSAGE
 
 var (
 	TOX_ERR_CONFERENCE_SEND_MESSAGE_OK                   ToxErrConferenceSendMessage = C.TOX_ERR_CONFERENCE_SEND_MESSAGE_OK
@@ -356,18 +359,59 @@ var (
 	TOX_ERR_CONFERENCE_SEND_MESSAGE_FAIL_SEND            ToxErrConferenceSendMessage = C.TOX_ERR_CONFERENCE_SEND_MESSAGE_FAIL_SEND
 )
 
-type ToxErrConferenceTitle C.Tox_Err_Conference_Title
+type ToxErrConferenceTitle C.TOX_ERR_CONFERENCE_GET_TYPE
 
 var (
-	TOX_ERR_CONFERENCE_TITLE_OK                   ToxErrConferenceTitle = C.TOX_ERR_CONFERENCE_TITLE_OK
+	c_OK                                          ToxErrConferenceTitle = C.TOX_ERR_CONFERENCE_TITLE_OK
 	TOX_ERR_CONFERENCE_TITLE_CONFERENCE_NOT_FOUND ToxErrConferenceTitle = C.TOX_ERR_CONFERENCE_TITLE_CONFERENCE_NOT_FOUND
 	TOX_ERR_CONFERENCE_TITLE_INVALID_LENGTH       ToxErrConferenceTitle = C.TOX_ERR_CONFERENCE_TITLE_INVALID_LENGTH
 	TOX_ERR_CONFERENCE_TITLE_FAIL_SEND            ToxErrConferenceTitle = C.TOX_ERR_CONFERENCE_TITLE_FAIL_SEND
 )
 
-type ToxErrConferenceGetType C.Tox_Err_Conference_Get_Type
+type ToxErrConferenceGetType C.TOX_ERR_CONFERENCE_GET_TYPE
 
 var (
 	TOX_ERR_CONFERENCE_GET_TYPE_OK                   ToxErrConferenceGetType = C.TOX_ERR_CONFERENCE_GET_TYPE_OK
 	TOX_ERR_CONFERENCE_GET_TYPE_CONFERENCE_NOT_FOUND ToxErrConferenceGetType = C.TOX_ERR_CONFERENCE_GET_TYPE_CONFERENCE_NOT_FOUND
+)
+
+// ====toxAV
+var (
+	ErrToxAVNew  = errors.New("Error initializing ToxAV")
+	ErrToxAVInit = errors.New("ToxAV not initialized")
+)
+var (
+	ErrNewMultiple = errors.New("Not allow to create a second session")
+)
+
+type ToxavErrNew C.TOXAV_ERR_NEW
+
+var (
+	TOXAV_ERR_NEW_OK       ToxavErrNew = C.TOXAV_ERR_NEW_OK
+	TOXAV_ERR_NEW_NULL     ToxavErrNew = C.TOXAV_ERR_NEW_NULL
+	TOXAV_ERR_NEW_MALLOC   ToxavErrNew = C.TOXAV_ERR_NEW_MALLOC
+	TOXAV_ERR_NEW_MULTIPLE ToxavErrNew = C.TOXAV_ERR_NEW_MULTIPLE
+)
+
+type ToxavErrCall C.TOXAV_ERR_CALL
+
+var (
+	TOXAV_ERR_CALL_OK                     ToxavErrCall = C.TOXAV_ERR_CALL_OK
+	TOXAV_ERR_CALL_MALLOC                 ToxavErrCall = C.TOXAV_ERR_CALL_MALLOC
+	TOXAV_ERR_CALL_SYNC                   ToxavErrCall = C.TOXAV_ERR_CALL_SYNC
+	TOXAV_ERR_CALL_FRIEND_NOT_FOUND       ToxavErrCall = C.TOXAV_ERR_CALL_FRIEND_NOT_FOUND
+	TOXAV_ERR_CALL_FRIEND_NOT_CONNECTED   ToxavErrCall = C.TOXAV_ERR_CALL_FRIEND_NOT_CONNECTED
+	TOXAV_ERR_CALL_FRIEND_ALREADY_IN_CALL ToxavErrCall = C.TOXAV_ERR_CALL_FRIEND_ALREADY_IN_CALL
+	TOXAV_ERR_CALL_INVALID_BIT_RATE       ToxavErrCall = C.TOXAV_ERR_CALL_INVALID_BIT_RATE
+)
+
+type ToxavErrAnswer C.TOXAV_ERR_ANSWER
+
+var (
+	TOXAV_ERR_ANSWER_OK                   ToxavErrAnswer = C.TOXAV_ERR_ANSWER_OK
+	TOXAV_ERR_ANSWER_SYNC                 ToxavErrAnswer = C.TOXAV_ERR_ANSWER_SYNC
+	TOXAV_ERR_ANSWER_CODEC_INITIALIZATION ToxavErrAnswer = C.TOXAV_ERR_ANSWER_CODEC_INITIALIZATION
+	TOXAV_ERR_ANSWER_FRIEND_NOT_FOUND     ToxavErrAnswer = C.TOXAV_ERR_ANSWER_FRIEND_NOT_FOUND
+	TOXAV_ERR_ANSWER_FRIEND_NOT_CALLING   ToxavErrAnswer = C.TOXAV_ERR_ANSWER_FRIEND_NOT_CALLING
+	TOXAV_ERR_ANSWER_INVALID_BIT_RATE     ToxavErrAnswer = C.TOXAV_ERR_ANSWER_INVALID_BIT_RATE
 )

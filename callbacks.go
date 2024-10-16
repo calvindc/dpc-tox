@@ -2,6 +2,7 @@ package dpc_tox
 
 /*
 #include <tox/tox.h>
+#include <tox/toxav.h>
 #include "hooks.c"
 */
 import "C"
@@ -67,6 +68,8 @@ type OnFriendLosslessPacket func(tox *Tox, friendnumber uint32, data []byte)
 type OnConferenceInvite func(tox *Tox, friendnumber uint32, conferencetype ToxConferenceType, cookie string) //, length uint64
 type OnConferenceConnected func(tox *Tox, conferencenumber uint32)
 type OnConferenceMessage func(tox *Tox, conferencenumber uint32, peernumber uint32, messagetype ToxMessageType, message string)
+
+type OnCall func(toxav *ToxAV, friendnumber uint32, audioenabled bool, videoenabled bool)
 
 /*
  * Functions to register the callbacks.
@@ -202,5 +205,12 @@ func (t *Tox) CallbackConferenceConnected(f OnConferenceConnected) {
 	if t.tox != nil {
 		t.onConferenceConnected = f
 		C.set_callback_conference_connected(t.tox)
+	}
+}
+
+func (tav *ToxAV) CallbackCall(f OnCall) {
+	if tav.tox != nil {
+		tav.onCall = f
+		C.set_callback_call(tav.toxav)
 	}
 }
