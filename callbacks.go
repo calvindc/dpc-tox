@@ -64,7 +64,9 @@ type OnFriendLossyPacket func(tox *Tox, friendnumber uint32, data []byte)
 type OnFriendLosslessPacket func(tox *Tox, friendnumber uint32, data []byte)
 
 /*Conference callbacks*/
-type onConferenceInvite func(tox *Tox, friendnumber uint32, conferencetype ToxConferenceType, cookie string) //, length uint64
+type OnConferenceInvite func(tox *Tox, friendnumber uint32, conferencetype ToxConferenceType, cookie string) //, length uint64
+type OnConferenceConnected func(tox *Tox, conferencenumber uint32)
+type OnConferenceMessage func(tox *Tox, conferencenumber uint32, peernumber uint32, messagetype ToxMessageType, message string)
 
 /*
  * Functions to register the callbacks.
@@ -175,9 +177,30 @@ func (t *Tox) CallbackFriendLosslessPacket(f OnFriendLosslessPacket) {
 	}
 }
 
-func (t *Tox) CallbackConferenceInvite(f onConferenceInvite) {
+/*This event is triggered when the client is invited to join a conference.*/
+func (t *Tox) CallbackConferenceInvite(f OnConferenceInvite) {
 	if t.tox != nil {
 		t.onConferenceInvite = f
 		C.set_callback_conference_invite(t.tox)
+	}
+}
+
+/*This event is triggered when the client receives a conference message.*/
+func (t *Tox) CallbackConferenceMessage(f OnConferenceMessage) {
+	if t.tox != nil {
+		t.onConferenceMessage = f
+		C.set_callback_conference_message(t.tox)
+	}
+}
+
+/*
+This event is triggered when the client successfully connects to a
+
+	conference after joining it with the tox_conference_join function.
+*/
+func (t *Tox) CallbackConferenceConnected(f OnConferenceConnected) {
+	if t.tox != nil {
+		t.onConferenceConnected = f
+		C.set_callback_conference_connected(t.tox)
 	}
 }

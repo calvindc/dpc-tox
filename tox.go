@@ -39,7 +39,9 @@ type Tox struct {
 	onFriendLossyPacket             OnFriendLossyPacket
 	onFriendLosslessPacket          OnFriendLosslessPacket
 
-	onConferenceInvite onConferenceInvite
+	onConferenceInvite    OnConferenceInvite
+	onConferenceMessage   OnConferenceMessage
+	onConferenceConnected OnConferenceConnected
 }
 
 type Options struct {

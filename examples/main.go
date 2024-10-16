@@ -37,7 +37,7 @@ func main() {
 	flag.StringVar(&filepath, "save", "./example_savedata", "path to save file")
 	flag.Parse()
 
-	fmt.Printf("[INFO] Using Tox version %d.%d.%d\n", dpc_tox.VersionMajor(), dpc_tox.VersionMinor(), dpc_tox.VersionPatch())
+	fmt.Printf("[INFO] Using Tox Library version %d.%d.%d\n", dpc_tox.VersionMajor(), dpc_tox.VersionMinor(), dpc_tox.VersionPatch())
 
 	if !dpc_tox.VersionIsCompatible(0, 2, 19) {
 		fmt.Println("[ERROR] The compiled library (toxcore) is not compatible with this example.")
@@ -72,14 +72,16 @@ func main() {
 	}
 
 	if newToxInstance {
-		tox.SelfSetName("tox-debuger")
-		tox.SelfSetStatusMessage("I am debuging tox!")
+		tox.SelfSetName("tox-debuger-1")
+		tox.SelfSetStatusMessage("I am a tox debug bot!")
 	}
 
 	addr, _ := tox.SelfGetAddress()
-	fmt.Println("TOX ID: ", strings.ToUpper(hex.EncodeToString(addr)))
+	fmt.Println("TOX ID:\t\t", strings.ToUpper(hex.EncodeToString(addr)))
+	public, _ := tox.SelfGetPublicKey()
+	fmt.Println("TOX Public Key:\t", strings.ToUpper(hex.EncodeToString(public)))
 	secert, _ := tox.SelfGetSecretKey()
-	fmt.Println("TOX Secret Key: ", strings.ToUpper(hex.EncodeToString(secert)))
+	fmt.Println("TOX Secret Key:\t", strings.ToUpper(hex.EncodeToString(secert)))
 
 	err = tox.SelfSetStatus(dpc_tox.TOX_USERSTATUS_NONE)
 	//err = tox.SelfSetStatus(dpc_tox.TOX_USERSTATUS_BUSY)
@@ -93,6 +95,8 @@ func main() {
 	tox.CallbackFileRecvChunk(onFileRecvChunk)
 
 	tox.CallbackConferenceInvite(onConferenceInvite)
+	tox.CallbackConferenceConnected(onConferenceConnected)
+	tox.CallbackConferenceMessage(onConferenceMessage)
 
 	/* Connect to the network
 	 * Use more than one node in a real world szenario. This example relies one
@@ -147,7 +151,7 @@ func onFriendMessage(t *dpc_tox.Tox, friendNumber uint32, messagetype dpc_tox.To
 
 	switch message {
 	case "00":
-		t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "Type '/help case' to use some internal function.")
+		t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "Type \n00(for help)\n11(send you a pic)\n22(i do create a new group and invite you to my all group)\n33(i get all group peers info \n to use some internal function for test.")
 
 	case "11":
 		file, err := os.Open("./examples/response.png")
@@ -358,6 +362,24 @@ func onConferenceInvite(t *dpc_tox.Tox, friendnumber uint32, conferencetype dpc_
 	default:
 		t.FriendSendMessage(friendnumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "unknow conferencetype")
 	}
+}
+func onConferenceMessage(t *dpc_tox.Tox, conferencenumber uint32, peernumber uint32, messagetype dpc_tox.ToxMessageType, message string) {
+	/*if peernumber == 0 {
+		return //self
+	}*/
+	fmt.Println("callback onConferenceInvite")
+	fmt.Println("*******************************")
+	fmt.Println(fmt.Sprintf("onConferenceMessage:conferencenumber=\t[%d]", conferencenumber))
+	fmt.Println(fmt.Sprintf("onConferenceMessage:peernumber=\t\t[%d]", peernumber))
+	fmt.Println(fmt.Sprintf("onConferenceMessage:messagetype=\t[%v]", messagetype))
+	fmt.Println(fmt.Sprintf("onConferenceMessage:message=\t\t[%s]", message))
+	fmt.Println("*******************************")
+
+	//t.ConferenceSendMessage(conferencenumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "This is an automatic reply ["+message+"].")
+}
+func onConferenceConnected(t *dpc_tox.Tox, conferencenumber uint32) {
+	fmt.Println("callback onConferenceConnected")
+	fmt.Println(fmt.Sprintf("i have joined the group[%d] and in", conferencenumber))
 }
 
 // loadData reads a file and returns its content as a byte array

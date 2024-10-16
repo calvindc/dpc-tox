@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<!--
+  WebTox - A web based graphical user interface for Tox
+  Copyright (C) 2014 WebTox authors and contributers
+
+  This file is part of WebTox.
+
+  WebTox is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  WebTox is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with WebTox.  If not, see <http://www.gnu.org/licenses/>.
+-->
+<html lang="en" ng-app="webtox" ng-controller="webtoxCtrl" class="ng-cloak">
+
+<head>
+  <title>WebTox</title>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="shortcut icon" href="img/favicon.png">
+  <link rel="shortcut icon" href="img/favicon.ico">
+  <link rel="stylesheet" href="bootstrap/css/bootstrap.min.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+
+<body>
+
+  <!-- Sidebar -->
+  <div id="profile-card">
+    <div id="profile-card-status-dropdown" class="dropdown">
+      <button href="#" class="btn dropdown-toggle" data-toggle="dropdown" id="profile-card-status-button">
+        <img ng-show="profile.status == 'NONE'" src="img/toxui/dot_online.png" alt="Online">
+        <img ng-show="profile.status == 'AWAY'" src="img/toxui/dot_away.png" alt="Away">
+        <img ng-show="profile.status == 'BUSY'" src="img/toxui/dot_busy.png" alt="Busy">
+        <!--<img ng-show="profile.status == 'INVI'" src="img/toxui/dot_invisible.png" alt="Invisible">-->
+      </button>
+
+      <ul class="dropdown-menu dropdown-menu-right">
+        <li>
+          <a href="#" ng-click="setUserStatus('NONE')">
+            <img src="img/toxui/dot_online.png">&emsp;
+            <span translate>Online</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" ng-click="setUserStatus('AWAY')">
+            <img src="img/toxui/dot_away.png">&emsp;
+            <span translate>Away</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" ng-click="setUserStatus('BUSY')">
+            <img src="img/toxui/dot_busy.png">&emsp;
+            <span translate>Busy</span>
+          </a>
+        </li>
+        <!--<li><a href="#" ng-click=""><img src="img/toxui/dot_invisible.png">&emsp;<span translate>Invisible</span></a></li>-->
+        <li class="divider"></li>
+        <li>
+          <a data-toggle="modal" href="#modal-toxid">
+            <span class="glyphicon glyphicon-user"></span>&emsp;
+            <span translate>Show ID</span>
+          </a>
+        </li>
+        <li>
+          <a ng-click="goFullscreen()" href="#">
+            <span class="glyphicon glyphicon-fullscreen"></span>&emsp;
+            <span translate>Fullscreen</span>
+          </a>
+        </li>
+        <li>
+          <a ng-click="showSettings()" href="#">
+            <span class="glyphicon glyphicon-cog"></span>&emsp;
+            <span translate>Settings</span>
+          </a>
+        </li>
+        <li>
+          <a data-toggle="modal" href="#modal-about">
+            <span class="glyphicon glyphicon-leaf"></span>&emsp;
+            <span translate>About</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <img id="profile-card-picture" src="img/toxui/blankavatar.png" alt="Profile picture" class="avatar">
+    <input type="text" id="profile-card-username" ng-model="profile.username" ng-blur="setUsername(profile.username)">
+    <input type="text" id="profile-card-status-msg" ng-model="profile.status_msg" ng-blur="setStatusMsg(profile.status_msg)">
+  </div>
+
+  <div id="contact-list-wrapper">
+    <div id="contact-list">
+      <select id="contact-list-status-select" ng-model="onlyShowOnlineContacts">
+        <option value="">All</option>
+        <option value="1">Online</option>
+      </select>
+      <button class="btn btn-toxgreen inline-button" ng-show="friendRequests.length == 1" data-toggle="modal" href="#modal-friend-requests">1 Friend Request</button>
+      <button class="btn btn-toxgreen inline-button" ng-show="friendRequests.length >= 2" data-toggle="modal" href="#modal-friend-requests">{{ friendRequests.length }} Friend Requests</button>
+      <button class="btn btn-toxgreen inline-button" href="#" ng-show="appInstallationStatus == 'notinstalled'" ng-click="installWebApp()">install</button>
+      <button class="btn btn-toxgreen inline-button disabled" href="#" ng-show="appInstallationStatus == 'success'" ng-click="installWebApp()">installed</button>
+      <a href="#" class="contact" ng-class="{active: contacts[activecontactindex] == contact}" ng-repeat="contact in contacts | orderBy:'online':true" ng-click="showChat(contact.number); scrollLeft();" ng-show="!onlyShowOnlineContacts || contact.online">
+        <img class="contact-status-icon" ng-show="contact.online && contact.status == 'NONE' && (contact.chat.length == 0 || contact.last_msg_read >= contact.chat[0].time)" alt="Online"  src="img/toxui/dot_online.png">
+        <img class="contact-status-icon" ng-show="contact.online && contact.status == 'NONE' && contact.last_msg_read < contact.chat[0].time"                                alt="Online"  src="img/toxui/dot_online_notification.png">
+        <img class="contact-status-icon" ng-show="contact.online && contact.status == 'AWAY' && (contact.chat.length == 0 || contact.last_msg_read >= contact.chat[0].time)" alt="Away"    src="img/toxui/dot_away.png">
+        <img class="contact-status-icon" ng-show="contact.online && contact.status == 'AWAY' && contact.last_msg_read < contact.chat[0].time"                                alt="Away"    src="img/toxui/dot_away_notification.png">
+        <img class="contact-status-icon" ng-show="contact.online && contact.status == 'BUSY' && (contact.chat.length == 0 || contact.last_msg_read >= contact.chat[0].time)" alt="Busy"    src="img/toxui/dot_busy.png">
+        <img class="contact-status-icon" ng-show="contact.online && contact.status == 'BUSY' && contact.last_msg_read < contact.chat[0].time"                                alt="Busy"    src="img/toxui/dot_busy_notification.png">
+        <img class="contact-status-icon" ng-show="!contact.online && (contact.chat.length == 0 || contact.last_msg_read >= contact.chat[0].time)"                            alt="Offline" src="img/toxui/dot_offline.png">
+        <img class="contact-status-icon" ng-show="!contact.online && contact.last_msg_read < contact.chat[0].time"                                                           alt="Offline" src="img/toxui/dot_offline_notification.png">
+        <img class="contact-avatar avatar" ng-src="avatars/{{contact.publicKey}}.png?{{curDate}}" onerror="this.src = 'img/toxui/blankavatar.png';" alt="avatar">
+        <div class="contact-name">{{contact.name.length ? contact.name : "[Name not set]"}}</div>
+        <div class="contact-status-msg">{{contact.status_msg.length ? contact.status_msg : '&nbsp;'}}</div>
+      </a>
+    </div>
+  </div>
+
+  <div id="button-panel">
+    <button data-toggle="modal" href="#modal-friend-requests" title="Add contact">
+      <img src="img/toxui/add.png" alt="Add contact">
+    </button>
+    <button ng-click="notImplemented()" title="New group chat">
+      <img src="img/toxui/group.png" alt="New group chat">
+    </button>
+    <button ng-click="notImplemented()" title="File transfer">
+      <img src="img/toxui/transfer.png" alt="File transfer">
+    </button>
+    <button ng-click="showSettings()" title="Settings">
+      <img src="img/toxui/settings.png" alt="Settings">
+    </button>
+  </div>
+  <!-- END OF Sidebar -->
+
+  <!-- Main View -->
+  <div id="mainview">
+    <!-- Welcome -->
+    <div id="mainview-welcome" ng-show="active_mainview === 'welcome'">
+      <h1>WebTox</h1>
+      <p>
+        <strong style="color: #c84e4e;">WebTox is not ready yet. Do not use it unless you know what you do.</strong>
+      </p>
+      <p>With the rise of government monitoring programs, Tox provides an easy to use application that allows you to connect with friends and family without anyone else listening in. While other big-name services require you to pay for features, Tox is totally
+        free, and comes without advertising.</p>
+      <p>Nowadays, every government seems to be interested in what we're saying online. Tox is built on a "privacy goes first" agenda, and we make no compromises. Your safety is our top priority, and there isn't anything in the world that will change that.</p>
+      <p>Proof: 1 + 2 = {{ 1 + 2 }}</p>
+    </div>
+
+    <!-- Chat -->
+    <div id="mainview-chat" ng-show="active_mainview === 'chat'">
+      <div id="mainview-chat-header">
+        <button class="chat-header-button btn btn-toxred pull-right" data-toggle="modal" href="#modal-friend-del">
+          <img src="img/toxui/no.png" alt="Unfriend">
+        </button>
+        <button class="chat-header-button btn btn-toxgreen pull-right">
+          <img src="img/toxui/video.png" alt="Video Call">
+        </button>
+        <button class="chat-header-button btn btn-toxgreen pull-right">
+          <img src="img/toxui/call.png" alt="Call">
+        </button>
+        <div id="profile-card-back-button" class="btn btn-toxgreen">&lt;</div>
+        <img src="img/toxui/blankavatar.png" alt="avatar" class="avatar">
+        <div id="mainview-chat-header-username">{{contacts[activecontactindex].name}}</div>
+        <div id="mainview-chat-header-status-msg">{{contacts[activecontactindex].status_msg}}</div>
+      </div>
+      <div id="mainview-chat-body">
+        <div ng-repeat="chat in contacts[activecontactindex].chat.slice().reverse()" ng-class="{messageself: !chat.isIncoming}">
+          <span class="chatname" ng-if="!chat.isIncoming">{{profile.username}}</span>
+          <span class="chatname" ng-if="chat.isIncoming">{{contacts[activecontactindex].name}}</span>
+          <span class="chatmsg">{{chat.message}}</span>
+          <span class="timestamp">{{chat.time | date : 'H:mm:ss'}}</span>
+        </div>
+      </div>
+      <div id="mainview-chat-footer">
+        <div id="mainview-chat-footer-textarea-wrapper">
+          <textarea ng-model="messagetosend"></textarea>
+        </div>
+        <div id="mainview-chat-footer-buttons-wrapper">
+          <button id="mainview-chat-footer-button-send" class="btn btn-toxgreen" ng-click="sendMessage()">
+            <img src="img/toxui/sendmessage.png" alt="Send">
+          </button>
+          <button id="mainview-chat-footer-button-emoticon" class="btn btn-toxgreen" ng-click="notImplemented()">
+            <img src="img/toxui/emoticon.png" alt=":-)">
+          </button>
+          <button id="mainview-chat-footer-button-attach" class="btn btn-toxgreen" ng-click="notImplemented()">
+            <img src="img/toxui/attach.png" alt="#">
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div id="mainview-settings" ng-show="active_mainview === 'settings'">
+      <h1>Settings</h1>
+      <hr>
+      <h4>Your Tox ID</h4>
+      <p>This is your Tox ID that you can give out to your friends.</p>
+      <div class="well well-sm well-toxid text-monospace text-center">{{profile.tox_id}}</div>
+      <hr>
+      <h4>GUI Authentication Username/Password</h4>
+      <div class="form-horizontal">
+        <div class="form-group">
+          <label for="inputAuthUser" class="col-sm-3 control-label">GUI Authentication User</label>
+          <div class="col-sm-3">
+            <input type="text" id="inputAuthUser" class="form-control input-sm" ng-model="settings.auth_user" value="" placeholder="User">
+          </div>
+          <div class="col-sm-1">
+            <button class="btn btn-sm btn-default initiallyhidden">Save</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="inputAuthPass" class="col-sm-3 control-label">GUI Authentication Password</label>
+          <div class="col-sm-3">
+            <input type="password" id="inputAuthPass" class="form-control input-sm" ng-model="settings.auth_password" value="" placeholder="Password">
+          </div>
+          <div class="col-sm-1">
+            <button class="btn btn-sm btn-default initiallyhidden">Save</button>
+          </div>
+        </div>
+      </div>
+      <hr>
+
+      <h4>General</h4>
+      <div class="form-horizontal">
+        <div class="form-group">
+          <div class="col-sm-offset-3 col-sm-3">
+            <div class="checkbox">
+              <label>
+                <input type="checkbox" id="checkbox-notifications" ng-model="settings.notifications_enabled"> Show notifications</label>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <div class="col-sm-offset-3 col-sm-3">
+            <div class="checkbox">
+              <label>
+                <input type="checkbox" id="checkbox-away-on-disconnect" ng-model="settings.away_on_disconnect"> Change status to <i>away</i> when the last webclient disconnects</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <hr>
+
+      <h4>Server</h4>
+      <div class="form-horizontal">
+        <div class="form-group">
+          <label for="inputAuthUser" class="col-sm-3 control-label">GUI Listen Address</label>
+          <div class="col-sm-3">
+            <input type="text" class="form-control input-sm" placeholder="127.0.0.1:8080">
+            <p class="help-block">Use 0.0.0.0 for external access</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- END OF Main View -->
+
+  <!-- Tox ID modal -->
+  <div class="modal info fade" id="modal-toxid" tabindex="-1" role="dialog" aria-labelledby="modal-toxid-title" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="modal-toxid-title">Your Tox ID</h4>
+        </div>
+        <div class="modal-body">
+          <div class="well well-sm well-toxid text-monospace text-center">{{profile.tox_id}}</div>
+          <p>This is your Tox ID that you can give out to your friends.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">
+            <span class="glyphicon glyphicon-remove"></span>
+            <span>Close</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Friend request modal -->
+  <div class="modal info fade" id="modal-friend-requests" tabindex="-1" role="dialog" aria-labelledby="modal-friend-requests-title" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="modal-friend-requests-title">Friend requests</h4>
+        </div>
+        <div class="modal-body">
+          <h3>Send a friend request</h3>
+          <form role="form" action="#" ng-submit="sendFriendRequest(new_friend_request.friend_id, new_friend_request.message)">
+            <div class="form-group input-group">
+              <span class="input-group-addon">Tox ID</span>
+              <input type="text" class="form-control" ng-model="new_friend_request.friend_id" placeholder="Please enter your friends Tox ID.">
+            </div>
+            <div class="form-group">
+              <textarea class="form-control" rows="3" ng-model="new_friend_request.message">Hey! Please let me add you to my contact list.</textarea>
+            </div>
+            <div class="form-group clearfix">
+              <input type="submit" class="btn btn-toxgreen pull-right">
+            </div>
+          </form>
+          <hr>
+          <h3>Incoming friend requests</h3>
+          <div class="panel panel-default friend-request" ng-repeat="friendRequest in friendRequests">
+            <div class="panel-heading" ng-click="toggleFriendRequestBody()">{{friendRequest.publicKey|uppercase}}</div>
+            <div class="panel-body" ng-show="!friendRequest.is_ignored">
+              <div style="white-space: pre;">{{friendRequest.message}}</div>
+              <div class="text-right">
+                <button class="btn btn-sm" ng-click="ignoreFriendRequest()">Ignore</button>
+                <button class="btn btn-sm btn-toxgreen" ng-click="acceptFriendRequest()">Accept</button>
+              </div>
+            </div>
+          </div>
+          <p ng-show="friendRequests.length == 0">No outstanding friend requests.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">
+            <span class="glyphicon glyphicon-remove"></span>
+            <span>Close</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete friend modal -->
+  <div class="modal warning fade" id="modal-friend-del" tabindex="-1" role="dialog" aria-labelledby="modal-friend-del-title" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="modal-friend-del-title">Remove friend?</h4>
+        </div>
+        <div class="modal-body">
+          <p>Do you really want to delete this contact?</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default btn-sm" ng-click="deleteFriend(contacts[activecontactindex].number)">
+            <span class="glyphicon glyphicon-ok"></span>
+            <span>Yes</span>
+          </button>
+          <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">
+            <span class="glyphicon glyphicon-remove"></span>
+            <span>No</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- About modal -->
+  <div class="modal info fade" id="modal-about" tabindex="-1" role="dialog" aria-labelledby="modal-about-title" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="modal-about-title">About</h4>
+        </div>
+        <div class="modal-body">
+          <h1 class="text-center">
+            <img alt="WebTox" title="WebTox" src="img/logo-with-text-512.png" style="max-width: 100%;">
+          </h1>
+          <h1 class="text-center">
+            <small>0.0.1</small>
+          </h1>
+          <hr/>
+          <p translate>Copyright &copy; 2014 WebTox authors and contributors</p>
+          <p translate>WebTox includes the following software or portions thereof:</p>
+          <ul>
+            <li><a href="https://github.com/irungentoo/toxcore">irungentoo/toxcore</a>, Copyright &copy; 2013 Tox project.</li>
+            <li><a href="https://github.com/calvindc/dpc-tox">calvindc/dpc-tox</a>, Copyright &copy; 2015 The gotox authors.</li>
+            <li><a href="https://github.com/ItsDuke/Tox-UI">ItsDuke/Tox-UI</a>, Copyright &copy; 2014 The Tox-UI authors.</li>
+            <li><a href="http://golang.org/">The Go Programming Language</a>, Copyright &copy; 2012 The Go authors.</li>
+            <li><a href="http://www.gorillatoolkit.org/">gorilla/websocket</a>, Copyright &copy; 2013 The Gorilla WebSocket authors.</li>
+            <li><a href="https://jquery.com/">jQuery</a>, Copyright &copy; 2005-2024 jQuery Foundation, Inc.</li>
+            <li><a href="https://angularjs.org/">AngularJS</a>, Copyright &copy; 2010-2024 Google, Inc.</li>
+            <li><a href="http://getbootstrap.com/">Bootstrap</a>, Copyright &copy; 2011-2024 Twitter, Inc.</li>
+            <li><a href="http://www.google.com/fonts/specimen/Roboto">The Roboto Font</a>, Copyright &copy; 2012 Google, Inc.</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">
+            <span class="glyphicon glyphicon-remove"></span>
+            <span>Close</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connection error modal -->
+  <div class="modal error fade" id="modal-connection-error" tabindex="-1" role="dialog" aria-labelledby="modal-connection-error-title" aria-hidden="true" data-keyboard="false" data-backdrop="static">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="modal-connection-error-title">Connection error</h4>
+        </div>
+        <div class="modal-body">
+          <p>WebTox is currently not connected to the server.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="angular/angular.min.js"></script>
+  <script src="jquery/jquery-1.11.1.min.js"></script>
+  <script src="bootstrap/js/bootstrap.min.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/fullscreen.js"></script>
+  <script src="js/webapp.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/ws.js"></script>
+</body>
+
+</html>

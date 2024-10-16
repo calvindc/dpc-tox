@@ -93,3 +93,13 @@ func hook_callback_friend_lossless_packet(t unsafe.Pointer, friendnumber C.uint3
 func hook_callback_conference_invite(t unsafe.Pointer, friendnumber C.uint32_t, ctype C.Tox_Conference_Type, cookies *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
 	(*Tox)(tox).onConferenceInvite((*Tox)(tox), uint32(friendnumber), ToxConferenceType(ctype), string(C.GoBytes(unsafe.Pointer(cookies), C.int(length))))
 }
+
+//export hook_callback_conference_connected
+func hook_callback_conference_connected(t unsafe.Pointer, conferencenumber C.uint32_t, tox unsafe.Pointer) {
+	(*Tox)(tox).onConferenceConnected((*Tox)(tox), uint32(conferencenumber))
+}
+
+//export hook_callback_conference_message
+func hook_callback_conference_message(t unsafe.Pointer, conferencenumber C.uint32_t, peernumber C.uint32_t, messagetype C.Tox_Message_Type, message *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
+	(*Tox)(tox).onConferenceMessage((*Tox)(tox), uint32(conferencenumber), uint32(peernumber), ToxMessageType(messagetype), string(C.GoBytes(unsafe.Pointer(message), C.int(length))))
+}
