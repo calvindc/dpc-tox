@@ -1,5 +1,4 @@
 #include <tox/tox.h>
-#include <tox/toxav.h>
 
 /* Convenient macro:
  * Creates the C function to directly register a given callback */
@@ -29,7 +28,7 @@ void hook_callback_conference_invite(Tox*, uint32_t, Tox_Conference_Type, const 
 void hook_callback_conference_connected(Tox*, uint32_t, void*);
 void hook_callback_conference_message(Tox*, uint32_t, uint32_t, TOX_MESSAGE_TYPE, const uint8_t*, size_t, void*);
 
-void hook_callback_call(ToxAV*, uint32_t, bool, bool, void*);
+//void hook_callback_call(ToxAV*, uint32_t, bool, bool, void*);
 
 
 CREATE_HOOK(callback_self_connection_status)
@@ -52,4 +51,4 @@ CREATE_HOOK(callback_conference_invite)
 CREATE_HOOK(callback_conference_connected)
 CREATE_HOOK(callback_conference_message)
 
-CREATE_HOOK(callback_call)
+//CREATE_HOOK(callback_call)

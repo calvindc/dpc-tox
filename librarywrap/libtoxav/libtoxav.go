@@ -1,4 +1,4 @@
-package dpc_tox
+package libtoxav
 
 //#cgo LDFLAGS: -ltoxcore
 //#include <tox/toxav.h>
@@ -6,12 +6,13 @@ package dpc_tox
 import "C"
 
 import (
+	"github.com/calvindc/dpc-tox/librarywrap/libtox"
 	"sync"
 	"unsafe"
 )
 
 type ToxAV struct {
-	tox   *Tox
+	tox   libtox.Tox
 	toxav *C.ToxAV
 	mtx   sync.Mutex
 
