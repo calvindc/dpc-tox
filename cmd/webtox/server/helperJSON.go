@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/calvindc/dpc-tox"
+	"github.com/calvindc/dpc-tox/librarywrapper/libtox"
 	"net/http"
 )
 
@@ -36,26 +36,26 @@ func rejectWithDefaultErrorJSON(w http.ResponseWriter) {
 	http.Error(w, string(jsonErr), 422)
 }
 
-// rejectWithFriendErrorJSON writes a dpc_tox.ToxErrFriendAdd error encoded as
+// rejectWithFriendErrorJSON writes a libtox.ToxErrFriendAdd error encoded as
 // JSON to a http.ResponseWriter
 // w    the http.ResponseWriter
-// err  the dpc_tox.ToxErrFriendAdd error to be encoded
+// err  the libtox.ToxErrFriendAdd error to be encoded
 func rejectWithFriendErrorJSON(w http.ResponseWriter, err error) {
 	switch err {
-	case dpc_tox.ErrFriendAddNoMessage:
+	case libtox.ErrFriendAddNoMessage:
 		rejectWithErrorJSON(w, "no_message", "An invitation message is required.")
 		return
-	case dpc_tox.ErrFriendAddTooLong:
+	case libtox.ErrFriendAddTooLong:
 		rejectWithErrorJSON(w, "invalid_message", "The message you entered is too long.")
 		return
-	case dpc_tox.ErrFriendAddOwnKey:
+	case libtox.ErrFriendAddOwnKey:
 		fallthrough
-	case dpc_tox.ErrFriendAddBadChecksum:
+	case libtox.ErrFriendAddBadChecksum:
 		fallthrough
-	case dpc_tox.ErrFriendAddSetNewNospam:
+	case libtox.ErrFriendAddSetNewNospam:
 		rejectWithErrorJSON(w, "invalid_toxid", "The Tox ID you entered is invalid.")
 		return
-	case dpc_tox.ErrFriendAddAlreadySent:
+	case libtox.ErrFriendAddAlreadySent:
 		rejectWithErrorJSON(w, "already_send", "A friend request to this person has already send.")
 		return
 	default:

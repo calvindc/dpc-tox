@@ -1,10 +1,12 @@
-package dpc_tox
+package libtox
 
 //#include <tox/tox.h>
 import "C"
 import "encoding/hex"
 import "unsafe"
-import "unicode/utf8"
+import (
+	"unicode/utf8"
+)
 
 //export hook_callback_self_connection_status
 func hook_callback_self_connection_status(t unsafe.Pointer, status C.TOX_CONNECTION, tox unsafe.Pointer) {
@@ -13,12 +15,12 @@ func hook_callback_self_connection_status(t unsafe.Pointer, status C.TOX_CONNECT
 
 //export hook_callback_friend_name
 func hook_callback_friend_name(t unsafe.Pointer, friendnumber C.uint32_t, name *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
-	(*Tox)(tox).onFriendNameChanges((*Tox)(tox), uint32(friendnumber), string(C.GoBytes(unsafe.Pointer(name), C.int(length))))
+	(*Tox)(tox).onFriendNameChanges((*Tox)(tox), uint32(friendnumber), C.GoBytes(unsafe.Pointer(name), C.int(length)), uint32(length))
 }
 
 //export hook_callback_friend_status_message
 func hook_callback_friend_status_message(t unsafe.Pointer, friendnumber C.uint32_t, message *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
-	(*Tox)(tox).onFriendStatusMessageChanges((*Tox)(tox), uint32(friendnumber), string(C.GoBytes(unsafe.Pointer(message), C.int(length))))
+	(*Tox)(tox).onFriendStatusMessageChanges((*Tox)(tox), uint32(friendnumber), C.GoBytes(unsafe.Pointer(message), C.int(length)), uint32(length))
 }
 
 //export hook_callback_friend_status
@@ -43,12 +45,12 @@ func hook_callback_friend_read_receipt(t unsafe.Pointer, friendnumber C.uint32_t
 
 //export hook_callback_friend_request
 func hook_callback_friend_request(t unsafe.Pointer, publicKey *C.uint8_t, message *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
-	(*Tox)(tox).onFriendRequest((*Tox)(tox), C.GoBytes((unsafe.Pointer)(publicKey), TOX_PUBLIC_KEY_SIZE), string(C.GoBytes(unsafe.Pointer(message), C.int(length))))
+	(*Tox)(tox).onFriendRequest((*Tox)(tox), C.GoBytes((unsafe.Pointer)(publicKey), TOX_PUBLIC_KEY_SIZE), C.GoBytes(unsafe.Pointer(message), C.int(length)), uint32(length))
 }
 
 //export hook_callback_friend_message
 func hook_callback_friend_message(t unsafe.Pointer, friendnumber C.uint32_t, messagetype C.TOX_MESSAGE_TYPE, message *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
-	(*Tox)(tox).onFriendMessage((*Tox)(tox), uint32(friendnumber), ToxMessageType(messagetype), string(C.GoBytes(unsafe.Pointer(message), C.int(length))))
+	(*Tox)(tox).onFriendMessage((*Tox)(tox), uint32(friendnumber), ToxMessageType(messagetype), C.GoBytes(unsafe.Pointer(message), C.int(length)), uint32(length))
 }
 
 //export hook_callback_file_recv_control
@@ -71,27 +73,27 @@ func hook_callback_file_recv(t unsafe.Pointer, friendnumber C.uint32_t, filenumb
 		goFilename = hex.EncodeToString(goFilenameBytes)
 	}
 
-	(*Tox)(tox).onFileRecv((*Tox)(tox), uint32(friendnumber), uint32(filenumber), ToxFileKind(kind), uint64(filesize), goFilename)
+	(*Tox)(tox).onFileRecv((*Tox)(tox), uint32(friendnumber), uint32(filenumber), ToxFileKind(kind), uint64(filesize), goFilename, uint32(filenameLength))
 }
 
 //export hook_callback_file_recv_chunk
 func hook_callback_file_recv_chunk(t unsafe.Pointer, friendnumber C.uint32_t, filenumber C.uint32_t, position C.uint64_t, data *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
-	(*Tox)(tox).onFileRecvChunk((*Tox)(tox), uint32(friendnumber), uint32(filenumber), uint64(position), C.GoBytes((unsafe.Pointer)(data), C.int(length)))
+	(*Tox)(tox).onFileRecvChunk((*Tox)(tox), uint32(friendnumber), uint32(filenumber), uint64(position), C.GoBytes((unsafe.Pointer)(data), C.int(length)), uint32(length))
 }
 
 //export hook_callback_friend_lossy_packet
 func hook_callback_friend_lossy_packet(t unsafe.Pointer, friendnumber C.uint32_t, data *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
-	(*Tox)(tox).onFriendLossyPacket((*Tox)(tox), uint32(friendnumber), C.GoBytes((unsafe.Pointer)(data), C.int(length)))
+	(*Tox)(tox).onFriendLossyPacket((*Tox)(tox), uint32(friendnumber), C.GoBytes((unsafe.Pointer)(data), C.int(length)), uint32(length))
 }
 
 //export hook_callback_friend_lossless_packet
 func hook_callback_friend_lossless_packet(t unsafe.Pointer, friendnumber C.uint32_t, data *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
-	(*Tox)(tox).onFriendLosslessPacket((*Tox)(tox), uint32(friendnumber), C.GoBytes((unsafe.Pointer)(data), (C.int)(length)))
+	(*Tox)(tox).onFriendLosslessPacket((*Tox)(tox), uint32(friendnumber), C.GoBytes((unsafe.Pointer)(data), (C.int)(length)), uint32(length))
 }
 
 //export hook_callback_conference_invite
 func hook_callback_conference_invite(t unsafe.Pointer, friendnumber C.uint32_t, ctype C.Tox_Conference_Type, cookies *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
-	(*Tox)(tox).onConferenceInvite((*Tox)(tox), uint32(friendnumber), ToxConferenceType(ctype), string(C.GoBytes(unsafe.Pointer(cookies), C.int(length))))
+	(*Tox)(tox).onConferenceInvite((*Tox)(tox), uint32(friendnumber), ToxConferenceType(ctype), C.GoBytes(unsafe.Pointer(cookies), C.int(length)))
 }
 
 //export hook_callback_conference_connected
@@ -101,5 +103,5 @@ func hook_callback_conference_connected(t unsafe.Pointer, conferencenumber C.uin
 
 //export hook_callback_conference_message
 func hook_callback_conference_message(t unsafe.Pointer, conferencenumber C.uint32_t, peernumber C.uint32_t, messagetype C.Tox_Message_Type, message *C.uint8_t, length C.size_t, tox unsafe.Pointer) {
-	(*Tox)(tox).onConferenceMessage((*Tox)(tox), uint32(conferencenumber), uint32(peernumber), ToxMessageType(messagetype), string(C.GoBytes(unsafe.Pointer(message), C.int(length))))
+	(*Tox)(tox).onConferenceMessage((*Tox)(tox), uint32(conferencenumber), uint32(peernumber), ToxMessageType(messagetype), C.GoBytes(unsafe.Pointer(message), C.int(length)), uint32(length))
 }

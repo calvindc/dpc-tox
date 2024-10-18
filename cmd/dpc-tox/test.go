@@ -5,7 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/calvindc/dpc-tox"
+	"github.com/calvindc/dpc-tox/librarywrapper/libtox"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -32,14 +32,14 @@ var transfers = make(map[uint32]FileTransfer)
 func main() {
 	var newToxInstance bool = false
 	var filepath string
-	var options *dpc_tox.Options
+	var options *libtox.Options
 
-	flag.StringVar(&filepath, "save", "./example_savedata", "path to save file")
+	flag.StringVar(&filepath, "save", "./testdata/test_savedata", "path to save file")
 	flag.Parse()
 
-	fmt.Printf("[INFO] Using Tox Library version %d.%d.%d\n", dpc_tox.VersionMajor(), dpc_tox.VersionMinor(), dpc_tox.VersionPatch())
+	fmt.Printf("[INFO] Using Tox Library version %d.%d.%d\n", libtox.VersionMajor(), libtox.VersionMinor(), libtox.VersionPatch())
 
-	if !dpc_tox.VersionIsCompatible(0, 2, 19) {
+	if !libtox.VersionIsCompatible(0, 2, 19) {
 		fmt.Println("[ERROR] The compiled library (toxcore) is not compatible with this example.")
 		fmt.Println("[ERROR] Please update your Tox library. If this error persists, please report it to the dpc_tox developers.")
 		fmt.Println("[ERROR] Thanks!")
@@ -49,16 +49,16 @@ func main() {
 	savedata, err := loadData(filepath)
 	if err == nil {
 		fmt.Println("[INFO] Loading Tox profile from savedata...")
-		options = &dpc_tox.Options{
+		options = &libtox.Options{
 			IPv6Enabled:  true,
 			UDPEnabled:   true,
-			ProxyType:    dpc_tox.TOX_PROXY_TYPE_NONE,
+			ProxyType:    libtox.TOX_PROXY_TYPE_NONE,
 			ProxyHost:    "127.0.0.1",
 			ProxyPort:    5555,
 			StartPort:    0,
 			EndPort:      0,
 			TcpPort:      0, // only enable TCP server if your client provides an option to disable it
-			SaveDataType: dpc_tox.TOX_SAVEDATA_TYPE_TOX_SAVE,
+			SaveDataType: libtox.TOX_SAVEDATA_TYPE_TOX_SAVE,
 			SaveData:     savedata}
 	} else {
 		fmt.Println("[INFO] Creating new Tox profile...")
@@ -66,14 +66,20 @@ func main() {
 		newToxInstance = true
 	}
 
-	tox, err := dpc_tox.New(options)
+	tox, err := libtox.New(options)
 	if err != nil {
 		panic(err)
 	}
 
 	if newToxInstance {
-		tox.SelfSetName("tox-debuger-1")
-		tox.SelfSetStatusMessage("I am a tox debug bot!")
+		err = tox.SelfSetName("tox-lib-debuger")
+		if err != nil {
+			fmt.Println(err)
+		}
+		err = tox.SelfSetStatusMessage("God has forgotten me!")
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 
 	addr, _ := tox.SelfGetAddress()
@@ -83,7 +89,7 @@ func main() {
 	secert, _ := tox.SelfGetSecretKey()
 	fmt.Println("TOX Secret Key:\t", strings.ToUpper(hex.EncodeToString(secert)))
 
-	err = tox.SelfSetStatus(dpc_tox.TOX_USERSTATUS_NONE)
+	err = tox.SelfSetStatus(libtox.TOX_USERSTATUS_NONE)
 	//err = tox.SelfSetStatus(dpc_tox.TOX_USERSTATUS_BUSY)
 
 	// Register our callbacks
@@ -133,15 +139,15 @@ func main() {
 	}
 }
 
-func onFriendRequest(t *dpc_tox.Tox, publicKey []byte, message string) {
+func onFriendRequest(t *libtox.Tox, publicKey []byte, message []byte, length uint32) {
 	fmt.Printf("New friend request from %s\n", hex.EncodeToString(publicKey))
-	fmt.Printf("With message: %v\n", message)
+	fmt.Printf("With message: %v\n", string(message))
 	// Auto-accept friend request
 	t.FriendAddNorequest(publicKey)
 }
 
-func onFriendMessage(t *dpc_tox.Tox, friendNumber uint32, messagetype dpc_tox.ToxMessageType, message string) {
-	if messagetype == dpc_tox.TOX_MESSAGE_TYPE_NORMAL {
+func onFriendMessage(t *libtox.Tox, friendNumber uint32, messagetype libtox.ToxMessageType, message []byte, length uint32) {
+	if messagetype == libtox.TOX_MESSAGE_TYPE_NORMAL {
 		friendName, _ := t.FriendGetName(friendNumber)
 		pubKey, _ := t.FriendGetPublickey(friendNumber)
 		fmt.Printf("New message from friend number[%d], name[%s], ID[%s], message[%s]\n", friendNumber, friendName, hex.EncodeToString(pubKey), message)
@@ -149,15 +155,16 @@ func onFriendMessage(t *dpc_tox.Tox, friendNumber uint32, messagetype dpc_tox.To
 		fmt.Printf("New action from %d : %s\n", friendNumber, message)
 	}
 
-	switch message {
+	switch string(message) {
 	case "00":
-		t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "Type \n00(for help)\n11(send you a pic)\n22(i do create a new group and invite you to my all group)\n33(i get all group peers info \n to use some internal function for test.")
+		sendMes := []byte("Type \n00(for help)\n11(send you a pic)\n22(i do create a new group and invite you to my all group)\n33(i get all group peers info) \n to use some internal function for test.")
+		t.FriendSendMessage(friendNumber, libtox.TOX_MESSAGE_TYPE_NORMAL, sendMes)
 
 	case "11":
-		file, err := os.Open("./examples/response.png")
+		file, err := os.Open("./testdata/response.png")
 		if err != nil {
 			defer file.Close()
-			t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "File not found. Please 'cd' into tox project")
+			t.FriendSendMessage(friendNumber, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte("File not found. Please 'cd' into tox project"))
 			//file.Close()
 			return
 		}
@@ -165,16 +172,16 @@ func onFriendMessage(t *dpc_tox.Tox, friendNumber uint32, messagetype dpc_tox.To
 		// get the file size
 		stat, err := file.Stat()
 		if err != nil {
-			t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "Could not read file stats.")
+			t.FriendSendMessage(friendNumber, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte("Could not read file stats."))
 			file.Close()
 			return
 		}
 
 		fmt.Println("File size is ", stat.Size())
 
-		fileNumber, err := t.FileSend(friendNumber, dpc_tox.TOX_FILE_KIND_DATA, uint64(stat.Size()), nil, "fileName.png")
+		fileNumber, err := t.FileSend(friendNumber, libtox.TOX_FILE_KIND_DATA, uint64(stat.Size()), nil, "fileName.png")
 		if err != nil {
-			t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "t.FileSend() failed.")
+			t.FriendSendMessage(friendNumber, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte("t.FileSend() failed."))
 			file.Close()
 			return
 		}
@@ -184,16 +191,16 @@ func onFriendMessage(t *dpc_tox.Tox, friendNumber uint32, messagetype dpc_tox.To
 	case "22":
 		conferenceNumber, err := t.ConferenceNew()
 		if err != nil {
-			t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "create group err:"+err.Error())
+			t.FriendSendMessage(friendNumber, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte("create group err:"+err.Error()))
 		}
-		t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, fmt.Sprintf("i will create a new group named 'GROUP-X' with you, conferenceNumber=%d", conferenceNumber))
-		title := fmt.Sprintf("GROUP%d", time.Now().UnixNano())
+		t.FriendSendMessage(friendNumber, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte(fmt.Sprintf("i will create a new group named 'group-nano' with you, conferenceNumber=%d", conferenceNumber)))
+		title := fmt.Sprintf("group-%d", time.Now().Nanosecond()/1e+6)
 		success, err := t.ConferenceSetTitle(conferenceNumber, title)
 		if err != nil {
 			fmt.Println(fmt.Sprintf("ConferenceSetTitle for conferenceNumber=[%d],err=%v", conferenceNumber, err))
 		}
 		if success {
-			t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "the new group build success, title is:"+title)
+			t.FriendSendMessage(friendNumber, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte("the new group build success, title is:"+title))
 		}
 		//test for invite to my room
 		myAllGroup, err := t.ConferenceGetChatlist()
@@ -221,53 +228,53 @@ func onFriendMessage(t *dpc_tox.Tox, friendNumber uint32, messagetype dpc_tox.To
 			for peerNumber, pubKey := range groupPeersInfo {
 				fmt.Println(fmt.Sprintf("ConferenceGetPeers groupNubmber=%d, peerNumber=%d,peerPubkey=%s", theGp, peerNumber, pubKey))
 			}
-			t.ConferenceSendMessage(theGp, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "welcome group...^~^")
+			t.ConferenceSendMessage(theGp, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte("welcome group...^~^"))
 		}
 
 	default:
-		t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "i see, your message is:"+message+", right?")
+		t.FriendSendMessage(friendNumber, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte("i see, your message is:"+string(message)+", right?"))
 	}
 }
 
-func onFileRecv(t *dpc_tox.Tox, friendNumber uint32, fileNumber uint32, kind dpc_tox.ToxFileKind, filesize uint64, filename string) {
+func onFileRecv(t *libtox.Tox, friendNumber uint32, fileNumber uint32, kind libtox.ToxFileKind, filesize uint64, filename string, length uint32) {
 	fmt.Println("callback onFileRecv")
-	if kind == dpc_tox.TOX_FILE_KIND_AVATAR {
+	if kind == libtox.TOX_FILE_KIND_AVATAR {
 
 		if filesize > MAX_AVATAR_SIZE {
 			// reject file send request
-			t.FileControl(friendNumber, fileNumber, dpc_tox.TOX_FILE_CONTROL_CANCEL)
+			t.FileControl(friendNumber, fileNumber, libtox.TOX_FILE_CONTROL_CANCEL)
 			return
 		}
 
 		publicKey, _ := t.FriendGetPublickey(friendNumber)
-		file, err := os.Create("example_" + hex.EncodeToString(publicKey) + ".png")
+		file, err := os.Create("./testdata/file_recv_" + hex.EncodeToString(publicKey) + ".png")
 		if err != nil {
-			fmt.Println("[ERROR] Error creating file", "example_"+hex.EncodeToString(publicKey)+".png")
+			fmt.Println("[ERROR] Error creating file", "test_"+hex.EncodeToString(publicKey)+".png")
 		}
 
 		// append the file to the map of active file transfers
 		transfers[fileNumber] = FileTransfer{fileHandle: file, fileSize: filesize}
 
 		// accept the file send request
-		t.FileControl(friendNumber, fileNumber, dpc_tox.TOX_FILE_CONTROL_RESUME)
+		t.FileControl(friendNumber, fileNumber, libtox.TOX_FILE_CONTROL_RESUME)
 
 	} else {
 		// accept files of any length
 
-		file, err := os.Create("example_" + filename)
+		file, err := os.Create("./testdata/file_recv_" + filename)
 		if err != nil {
-			fmt.Println("[ERROR] Error creating file", "example_"+filename)
+			fmt.Println("[ERROR] Error creating file", "test_"+filename)
 		}
 
 		// append the file to the map of active file transfers
 		transfers[fileNumber] = FileTransfer{fileHandle: file, fileSize: filesize}
 
 		// accept the file send request
-		t.FileControl(friendNumber, fileNumber, dpc_tox.TOX_FILE_CONTROL_RESUME)
+		t.FileControl(friendNumber, fileNumber, libtox.TOX_FILE_CONTROL_RESUME)
 	}
 }
 
-func onFileRecvControl(t *dpc_tox.Tox, friendNumber uint32, fileNumber uint32, fileControl dpc_tox.ToxFileControl) {
+func onFileRecvControl(t *libtox.Tox, friendNumber uint32, fileNumber uint32, fileControl libtox.ToxFileControl) {
 	fmt.Println("callback onFileRecvControl")
 	transfer, ok := transfers[fileNumber]
 	if !ok {
@@ -275,7 +282,7 @@ func onFileRecvControl(t *dpc_tox.Tox, friendNumber uint32, fileNumber uint32, f
 		return
 	}
 
-	if fileControl == dpc_tox.TOX_FILE_CONTROL_CANCEL {
+	if fileControl == libtox.TOX_FILE_CONTROL_CANCEL {
 		// delete file handle
 		transfer.fileHandle.Sync()
 		transfer.fileHandle.Close()
@@ -283,7 +290,7 @@ func onFileRecvControl(t *dpc_tox.Tox, friendNumber uint32, fileNumber uint32, f
 	}
 }
 
-func onFileChunkRequest(t *dpc_tox.Tox, friendNumber uint32, fileNumber uint32, position uint64, length uint64) {
+func onFileChunkRequest(t *libtox.Tox, friendNumber uint32, fileNumber uint32, position uint64, length uint64) {
 	fmt.Println(fmt.Sprintf("callback onFileChunkRequest friendNumber:%d,,position:%d,length:%d", friendNumber, position, length))
 
 	transfer, ok := transfers[fileNumber]
@@ -312,7 +319,7 @@ func onFileChunkRequest(t *dpc_tox.Tox, friendNumber uint32, fileNumber uint32, 
 	t.FileSendChunk(friendNumber, fileNumber, position, data)
 }
 
-func onFileRecvChunk(t *dpc_tox.Tox, friendNumber uint32, fileNumber uint32, position uint64, data []byte) {
+func onFileRecvChunk(t *libtox.Tox, friendNumber uint32, fileNumber uint32, position uint64, data []byte, length uint32) {
 	fmt.Println("callback onFileRecvChunk")
 	transfer, ok := transfers[fileNumber]
 	if !ok {
@@ -341,29 +348,29 @@ func onFileRecvChunk(t *dpc_tox.Tox, friendNumber uint32, fileNumber uint32, pos
 		transfer.fileHandle.Close()
 		delete(transfers, fileNumber)
 		fmt.Println("File transfer completed (receiving)", fileNumber)
-		t.FriendSendMessage(friendNumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "Thanks!")
+		t.FriendSendMessage(friendNumber, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte("Thanks!"))
 	}
 }
 
-func onConferenceInvite(t *dpc_tox.Tox, friendnumber uint32, conferencetype dpc_tox.ToxConferenceType, cookie string) {
+func onConferenceInvite(t *libtox.Tox, friendnumber uint32, conferencetype libtox.ToxConferenceType, cookie []byte) {
 	fmt.Println("callback onConferenceInvite")
 	fmt.Printf("New conference invite from [%d], conferenceType=%v, ", friendnumber, conferencetype)
 	fmt.Printf("With cookie: %s\n", cookie)
 
 	switch conferencetype {
-	case dpc_tox.TOX_CONFERENCE_TYPE_TEXT:
+	case libtox.TOX_CONFERENCE_TYPE_TEXT:
 		ret, err := t.ConferenceJoin(friendnumber, cookie)
 		if err != nil {
 			fmt.Println(fmt.Sprintf("ConferenceJoin err=%v, ret=%v", err, ret))
 		}
 
-	case dpc_tox.TOX_CONFERENCE_TYPE_AV:
-		t.FriendSendMessage(friendnumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "can not join av group")
+	case libtox.TOX_CONFERENCE_TYPE_AV:
+		t.FriendSendMessage(friendnumber, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte("can not join av group"))
 	default:
-		t.FriendSendMessage(friendnumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "unknow conferencetype")
+		t.FriendSendMessage(friendnumber, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte("unknow conferencetype"))
 	}
 }
-func onConferenceMessage(t *dpc_tox.Tox, conferencenumber uint32, peernumber uint32, messagetype dpc_tox.ToxMessageType, message string) {
+func onConferenceMessage(t *libtox.Tox, conferencenumber uint32, peernumber uint32, messagetype libtox.ToxMessageType, message []byte, length uint32) {
 	/*if peernumber == 0 {
 		return //self
 	}*/
@@ -377,7 +384,7 @@ func onConferenceMessage(t *dpc_tox.Tox, conferencenumber uint32, peernumber uin
 
 	//t.ConferenceSendMessage(conferencenumber, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, "This is an automatic reply ["+message+"].")
 }
-func onConferenceConnected(t *dpc_tox.Tox, conferencenumber uint32) {
+func onConferenceConnected(t *libtox.Tox, conferencenumber uint32) {
 	fmt.Println("callback onConferenceConnected")
 	fmt.Println(fmt.Sprintf("i have joined the group[%d] and in", conferencenumber))
 }
@@ -397,7 +404,7 @@ func loadData(filepath string) ([]byte, error) {
 }
 
 // saveData writes the savedata from toxcore to a file
-func saveData(t *dpc_tox.Tox, filepath string) error {
+func saveData(t *libtox.Tox, filepath string) error {
 	if len(filepath) == 0 {
 		return errors.New("Empty path")
 	}

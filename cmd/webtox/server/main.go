@@ -4,9 +4,9 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"github.com/calvindc/dpc-tox"
-	"github.com/calvindc/dpc-tox/webtox/httpserve"
-	"github.com/calvindc/dpc-tox/webtox/server/persistence"
+	"github.com/calvindc/dpc-tox/cmd/webtox/httpserve"
+	"github.com/calvindc/dpc-tox/cmd/webtox/server/persistence"
+	"github.com/calvindc/dpc-tox/librarywrapper/libtox"
 	"log"
 	"net/http"
 	"os"
@@ -17,7 +17,7 @@ import (
 )
 
 // the global tox instance
-var tox *dpc_tox.Tox
+var tox *libtox.Tox
 
 // the global connection to the database
 var storage *persistence.StorageConn
@@ -28,7 +28,7 @@ var authOptions *httpserve.AuthOptions
 type FileTransfer struct {
 	fileHandle *os.File
 	fileSize   uint64
-	fileKind   dpc_tox.ToxFileKind
+	fileKind   libtox.ToxFileKind
 }
 
 // Map of active file transfers
@@ -36,7 +36,7 @@ var transfers = make(map[uint32]FileTransfer)
 
 func main() {
 	var newToxInstance bool = false
-	var options *dpc_tox.Options
+	var options *libtox.Options
 	var databasePath string = filepath.Join(CFG_DATA_DIR, "userdata.db")
 
 	var err error
@@ -53,33 +53,33 @@ func main() {
 
 	savedata, err := loadData(toxSaveFilepath)
 	if err == nil {
-		options = &dpc_tox.Options{
+		options = &libtox.Options{
 			IPv6Enabled:  true,
 			UDPEnabled:   true,
-			ProxyType:    dpc_tox.TOX_PROXY_TYPE_NONE,
+			ProxyType:    libtox.TOX_PROXY_TYPE_NONE,
 			ProxyHost:    "127.0.0.1",
 			ProxyPort:    5555,
 			StartPort:    0,
 			EndPort:      0,
 			TcpPort:      CFG_TCP_PROXY_PORT,
-			SaveDataType: dpc_tox.TOX_SAVEDATA_TYPE_TOX_SAVE,
+			SaveDataType: libtox.TOX_SAVEDATA_TYPE_TOX_SAVE,
 			SaveData:     savedata}
 	} else {
-		options = &dpc_tox.Options{
+		options = &libtox.Options{
 			IPv6Enabled:  true,
 			UDPEnabled:   true,
-			ProxyType:    dpc_tox.TOX_PROXY_TYPE_NONE,
+			ProxyType:    libtox.TOX_PROXY_TYPE_NONE,
 			ProxyHost:    "127.0.0.1",
 			ProxyPort:    5555,
 			StartPort:    0,
 			EndPort:      0,
 			TcpPort:      CFG_TCP_PROXY_PORT,
-			SaveDataType: dpc_tox.TOX_SAVEDATA_TYPE_NONE,
+			SaveDataType: libtox.TOX_SAVEDATA_TYPE_NONE,
 			SaveData:     nil}
 		newToxInstance = true
 	}
 
-	tox, err = dpc_tox.New(options)
+	tox, err = libtox.New(options)
 	if err != nil {
 		panic(err)
 	}
@@ -96,7 +96,7 @@ func main() {
 		fmt.Println("Setting username to default: WebTox User")
 		tox.SelfSetName("WebTox User")
 		tox.SelfSetStatusMessage("WebToxing around...")
-		tox.SelfSetStatus(dpc_tox.TOX_USERSTATUS_NONE)
+		tox.SelfSetStatus(libtox.TOX_USERSTATUS_NONE)
 	} else {
 		name, err := tox.SelfGetName()
 		if err != nil {
@@ -113,7 +113,7 @@ func main() {
 		}
 
 		if _, err = tox.SelfGetStatus(); err != nil {
-			if err = tox.SelfSetStatus(dpc_tox.TOX_USERSTATUS_NONE); err != nil {
+			if err = tox.SelfSetStatus(libtox.TOX_USERSTATUS_NONE); err != nil {
 				panic(err)
 			}
 		}

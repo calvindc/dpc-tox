@@ -5,7 +5,7 @@
  */
 #define CREATE_HOOK(x) \
 static void set_##x(Tox *tox, void *t) { \
-  tox_##x(tox, hook_##x, t); \
+  tox_##x(tox, hook_##x); \
 }
 
 //Tag: Headers for the exported GO functions in /libtox/hooks.go

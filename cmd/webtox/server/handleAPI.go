@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/calvindc/dpc-tox"
-	"github.com/calvindc/dpc-tox/webtox/httpserve"
+	"github.com/calvindc/dpc-tox/cmd/webtox/httpserve"
+	"github.com/calvindc/dpc-tox/librarywrapper/libtox"
 	"log"
 	"net/http"
 	"strconv"
@@ -137,7 +137,7 @@ var handleAPI = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			_, err = tox.FriendSendMessage(incomingData.Friend, dpc_tox.TOX_MESSAGE_TYPE_NORMAL, incomingData.Message)
+			_, err = tox.FriendSendMessage(incomingData.Friend, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte(incomingData.Message))
 			if err != nil {
 				rejectWithDefaultErrorJSON(w)
 				return
@@ -233,7 +233,7 @@ var handleAPI = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			}
 
 			friendAddressBytes, err := hex.DecodeString(incomingData.FriendID)
-			if err != nil || len(friendAddressBytes) != dpc_tox.TOX_ADDRESS_SIZE {
+			if err != nil || len(friendAddressBytes) != libtox.TOX_ADDRESS_SIZE {
 				rejectWithErrorJSON(w, "invalid_toxid", "The Tox ID you entered is invalid.")
 				return
 			}

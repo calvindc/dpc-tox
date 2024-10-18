@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
-	dpc_tox "github.com/calvindc/dpc-tox"
+	"github.com/calvindc/dpc-tox/librarywrapper/libtox"
 )
 
 // getFriendListJSON returns the users Tox friendlist as a JSON string
@@ -60,7 +60,7 @@ func getFriendListJSON() (string, error) {
 			Name:            name,
 			Status:          getUserStatusAsString(userstatus),
 			StatusMsg:       string(status_msg),
-			Online:          connected != dpc_tox.TOX_CONNECTION_NONE,
+			Online:          connected != libtox.TOX_CONNECTION_NONE,
 		}
 
 		friends[i] = newfriend

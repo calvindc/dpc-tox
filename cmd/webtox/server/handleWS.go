@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/calvindc/dpc-tox"
+	"github.com/calvindc/dpc-tox/librarywrapper/libtox"
 	"golang.org/x/net/websocket"
 	"strconv"
 )
@@ -38,7 +38,7 @@ var handleWS = websocket.Handler(func(conn *websocket.Conn) {
 	awayOnDisconnect, _ := strconv.ParseBool(awayOnDisconnectString)
 
 	if awayOnDisconnect && len(activeConnections) == 1 {
-		tox.SelfSetStatus(dpc_tox.TOX_USERSTATUS_NONE)
+		tox.SelfSetStatus(libtox.TOX_USERSTATUS_NONE)
 		broadcastToClients(createSimpleJSONEvent("profile_update"))
 	}
 
@@ -54,7 +54,7 @@ var handleWS = websocket.Handler(func(conn *websocket.Conn) {
 				awayOnDisconnect, _ := strconv.ParseBool(awayOnDisconnectString)
 
 				if awayOnDisconnect {
-					tox.SelfSetStatus(dpc_tox.TOX_USERSTATUS_AWAY)
+					tox.SelfSetStatus(libtox.TOX_USERSTATUS_AWAY)
 				}
 			}
 			return

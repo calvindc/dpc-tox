@@ -2,8 +2,8 @@ package main
 
 import (
 	"errors"
-	"github.com/calvindc/dpc-tox"
-	"github.com/calvindc/dpc-tox/webtox/httpserve"
+	"github.com/calvindc/dpc-tox/cmd/webtox/httpserve"
+	"github.com/calvindc/dpc-tox/librarywrapper/libtox"
 	"io/ioutil"
 	"log"
 	"os"
@@ -11,13 +11,13 @@ import (
 
 // getUserStatusAsString returns a string representing the given Tox user status
 // status  the Tox user status to be converted
-func getUserStatusAsString(status dpc_tox.ToxUserStatus) string {
+func getUserStatusAsString(status libtox.ToxUserStatus) string {
 	switch status {
-	case dpc_tox.TOX_USERSTATUS_NONE:
+	case libtox.TOX_USERSTATUS_NONE:
 		return "NONE"
-	case dpc_tox.TOX_USERSTATUS_AWAY:
+	case libtox.TOX_USERSTATUS_AWAY:
 		return "AWAY"
-	case dpc_tox.TOX_USERSTATUS_BUSY:
+	case libtox.TOX_USERSTATUS_BUSY:
 		return "BUSY"
 	default:
 		return "INVALID"
@@ -27,23 +27,23 @@ func getUserStatusAsString(status dpc_tox.ToxUserStatus) string {
 // getUserStatusFromString returns the Tox user status represented by the given
 // user status string
 // status  the user status as a string to be converted
-func getUserStatusFromString(status string) dpc_tox.ToxUserStatus {
+func getUserStatusFromString(status string) libtox.ToxUserStatus {
 	switch status {
 	case "NONE":
-		return dpc_tox.TOX_USERSTATUS_NONE
+		return libtox.TOX_USERSTATUS_NONE
 	case "AWAY":
-		return dpc_tox.TOX_USERSTATUS_AWAY
+		return libtox.TOX_USERSTATUS_AWAY
 	case "BUSY":
-		return dpc_tox.TOX_USERSTATUS_BUSY
+		return libtox.TOX_USERSTATUS_BUSY
 	default:
-		return dpc_tox.TOX_USERSTATUS_NONE
+		return libtox.TOX_USERSTATUS_NONE
 	}
 }
 
 // saveData writes the current Tox saveData to a file
-// t         the dpc_tox instance whichs saveData will be stored
+// t         the libtox instance whichs saveData will be stored
 // filepath  the path to the file the saveData will be stored in
-func saveData(t *dpc_tox.Tox, filepath string) error {
+func saveData(t *libtox.Tox, filepath string) error {
 	if len(filepath) == 0 {
 		return errors.New("Empty path")
 	}

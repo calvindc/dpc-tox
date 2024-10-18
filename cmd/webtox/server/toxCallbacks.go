@@ -3,20 +3,20 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
-	"github.com/calvindc/dpc-tox"
+	"github.com/calvindc/dpc-tox/librarywrapper/libtox"
 	"log"
 	"os"
 	"time"
 )
 
-func onFriendRequest(t *dpc_tox.Tox, publicKey []byte, message string) {
+func onFriendRequest(t *libtox.Tox, publicKey []byte, message []byte, length uint32) {
 	log.Printf("New friend request from %s\n", hex.EncodeToString(publicKey))
 
-	storage.StoreFriendRequest(hex.EncodeToString(publicKey), message)
+	storage.StoreFriendRequest(hex.EncodeToString(publicKey), string(message))
 	broadcastToClients(createSimpleJSONEvent("friend_requests_update"))
 }
 
-func onFriendMessage(t *dpc_tox.Tox, friendnumber uint32, messagetype dpc_tox.ToxMessageType, message string) {
+func onFriendMessage(t *libtox.Tox, friendnumber uint32, messagetype libtox.ToxMessageType, message []byte, length uint32) {
 	type jsonEvent struct {
 		Type     string `json:"type"`
 		Friend   uint32 `json:"friend"`
@@ -29,17 +29,17 @@ func onFriendMessage(t *dpc_tox.Tox, friendnumber uint32, messagetype dpc_tox.To
 		Type:     "friend_message",
 		Friend:   friendnumber,
 		Time:     time.Now().Unix() * 1000,
-		Message:  message,
-		IsAction: messagetype == dpc_tox.TOX_MESSAGE_TYPE_ACTION,
+		Message:  string(message),
+		IsAction: messagetype == libtox.TOX_MESSAGE_TYPE_ACTION,
 	})
 
 	publicKey, _ := tox.FriendGetPublickey(friendnumber)
-	storage.StoreMessage(hex.EncodeToString(publicKey), true, messagetype == dpc_tox.TOX_MESSAGE_TYPE_ACTION, message)
+	storage.StoreMessage(hex.EncodeToString(publicKey), true, messagetype == libtox.TOX_MESSAGE_TYPE_ACTION, string(message))
 
 	broadcastToClients(string(e))
 }
 
-func onFriendConnectionStatusChanges(t *dpc_tox.Tox, friendnumber uint32, connectionStatus dpc_tox.ToxConnection) {
+func onFriendConnectionStatusChanges(t *libtox.Tox, friendnumber uint32, connectionStatus libtox.ToxConnection) {
 	type jsonEvent struct {
 		Type   string `json:"type"`
 		Friend uint32 `json:"friend"`
@@ -49,13 +49,13 @@ func onFriendConnectionStatusChanges(t *dpc_tox.Tox, friendnumber uint32, connec
 	e, _ := json.Marshal(jsonEvent{
 		Type:   "connection_status",
 		Friend: friendnumber,
-		Online: connectionStatus != dpc_tox.TOX_CONNECTION_NONE,
+		Online: connectionStatus != libtox.TOX_CONNECTION_NONE,
 	})
 
 	broadcastToClients(string(e))
 }
 
-func onFriendNameChanges(t *dpc_tox.Tox, friendnumber uint32, newname string) {
+func onFriendNameChanges(t *libtox.Tox, friendnumber uint32, newname []byte, length uint32) {
 	type jsonEvent struct {
 		Type   string `json:"type"`
 		Friend uint32 `json:"friend"`
@@ -65,13 +65,13 @@ func onFriendNameChanges(t *dpc_tox.Tox, friendnumber uint32, newname string) {
 	e, _ := json.Marshal(jsonEvent{
 		Type:   "name_changed",
 		Friend: friendnumber,
-		Name:   newname,
+		Name:   string(newname),
 	})
 
 	broadcastToClients(string(e))
 }
 
-func onFriendStatusMessageChanges(t *dpc_tox.Tox, friendnumber uint32, status string) {
+func onFriendStatusMessageChanges(t *libtox.Tox, friendnumber uint32, status []byte, length uint32) {
 	type jsonEvent struct {
 		Type      string `json:"type"`
 		Friend    uint32 `json:"friend"`
@@ -81,13 +81,13 @@ func onFriendStatusMessageChanges(t *dpc_tox.Tox, friendnumber uint32, status st
 	e, _ := json.Marshal(jsonEvent{
 		Type:      "status_message_changed",
 		Friend:    friendnumber,
-		StatusMsg: status,
+		StatusMsg: string(status),
 	})
 
 	broadcastToClients(string(e))
 }
 
-func onFriendStatusChanges(t *dpc_tox.Tox, friendnumber uint32, userstatus dpc_tox.ToxUserStatus) {
+func onFriendStatusChanges(t *libtox.Tox, friendnumber uint32, userstatus libtox.ToxUserStatus) {
 	type jsonEvent struct {
 		Type   string `json:"type"`
 		Friend uint32 `json:"friend"`
@@ -103,8 +103,8 @@ func onFriendStatusChanges(t *dpc_tox.Tox, friendnumber uint32, userstatus dpc_t
 	broadcastToClients(string(e))
 }
 
-func onFileRecv(t *dpc_tox.Tox, friendnumber uint32, filenumber uint32, kind dpc_tox.ToxFileKind, filesize uint64, filename string) {
-	if kind == dpc_tox.TOX_FILE_KIND_AVATAR {
+func onFileRecv(t *libtox.Tox, friendnumber uint32, filenumber uint32, kind libtox.ToxFileKind, filesize uint64, filename string, length uint32) {
+	if kind == libtox.TOX_FILE_KIND_AVATAR {
 		publicKey, _ := tox.FriendGetPublickey(friendnumber)
 		file, err := os.Create("../html/avatars/" + hex.EncodeToString(publicKey) + ".png")
 		if err != nil {
@@ -116,29 +116,29 @@ func onFileRecv(t *dpc_tox.Tox, friendnumber uint32, filenumber uint32, kind dpc
 			// append the file to the map of active file transfers
 			transfers[filenumber] = FileTransfer{fileHandle: file, fileSize: filesize, fileKind: kind}
 
-			t.FileControl(friendnumber, filenumber, dpc_tox.TOX_FILE_CONTROL_RESUME)
+			t.FileControl(friendnumber, filenumber, libtox.TOX_FILE_CONTROL_RESUME)
 		} else {
-			t.FileControl(friendnumber, filenumber, dpc_tox.TOX_FILE_CONTROL_CANCEL)
+			t.FileControl(friendnumber, filenumber, libtox.TOX_FILE_CONTROL_CANCEL)
 		}
 
-	} else if kind == dpc_tox.TOX_FILE_KIND_DATA {
-		file, err := os.Create("../html/download/" + filename)
+	} else if kind == libtox.TOX_FILE_KIND_DATA {
+		file, err := os.Create("../html/download/" + string(filename))
 		if err != nil {
-			log.Println("[ERROR] Error creating file", "../html/download/"+filename)
+			log.Println("[ERROR] Error creating file", "../html/download/"+string(filename))
 		}
 
 		// append the file to the map of active file transfers
 		transfers[filenumber] = FileTransfer{fileHandle: file, fileSize: filesize, fileKind: kind}
 
 		// TODO do not accept any file send request without asking the user
-		t.FileControl(friendnumber, filenumber, dpc_tox.TOX_FILE_CONTROL_RESUME)
+		t.FileControl(friendnumber, filenumber, libtox.TOX_FILE_CONTROL_RESUME)
 
 	} else {
 		log.Print("onFileRecv: unknown TOX_FILE_KIND: ", kind)
 	}
 }
 
-func onFileRecvControl(t *dpc_tox.Tox, friendnumber uint32, filenumber uint32, fileControl dpc_tox.ToxFileControl) {
+func onFileRecvControl(t *libtox.Tox, friendnumber uint32, filenumber uint32, fileControl libtox.ToxFileControl) {
 	transfer, ok := transfers[filenumber]
 	if !ok {
 		log.Println("Error: File handle does not exist")
@@ -146,14 +146,14 @@ func onFileRecvControl(t *dpc_tox.Tox, friendnumber uint32, filenumber uint32, f
 	}
 
 	// TODO handle TOX_FILE_CONTROL_RESUME and TOX_FILE_CONTROL_PAUSE
-	if fileControl == dpc_tox.TOX_FILE_CONTROL_CANCEL {
+	if fileControl == libtox.TOX_FILE_CONTROL_CANCEL {
 		// delete file handle
 		transfer.fileHandle.Close()
 		delete(transfers, filenumber)
 	}
 }
 
-func onFileRecvChunk(t *dpc_tox.Tox, friendnumber uint32, filenumber uint32, position uint64, data []byte) {
+func onFileRecvChunk(t *libtox.Tox, friendnumber uint32, filenumber uint32, position uint64, data []byte, length uint32) {
 	transfer, ok := transfers[filenumber]
 	if !ok {
 		if len(data) == 0 {
@@ -184,7 +184,7 @@ func onFileRecvChunk(t *dpc_tox.Tox, friendnumber uint32, filenumber uint32, pos
 		delete(transfers, filenumber)
 		log.Println("File transfer completed (receiving)", filenumber)
 
-		if fileKind == dpc_tox.TOX_FILE_KIND_AVATAR {
+		if fileKind == libtox.TOX_FILE_KIND_AVATAR {
 			// update friendlist
 			broadcastToClients(createSimpleJSONEvent("avatar_update"))
 		}

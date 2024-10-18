@@ -1,9 +1,7 @@
-package dpc_tox
+package libtoxav
 
-/*
-#include <tox/toxav.h>
-#include "hookav.c"
-*/
+//#include <tox/toxav.h>
+//#include "hooks-macro.c"
 import "C"
 import "unsafe"
 

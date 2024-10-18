@@ -2,8 +2,14 @@ package libtox
 
 //#cgo LDFLAGS: -ltoxcore
 //#include <tox/tox.h>
+//#include <stdlib.h>
 import "C"
 import (
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"math"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -17,7 +23,7 @@ import (
  */
 type Tox struct {
 	cOptions *C.struct_Tox_Options
-	tox      *C.Tox
+	Toxcore  *C.Tox
 	mtx      sync.Mutex
 
 	// Callbacks
@@ -190,7 +196,7 @@ func New(options *Options) (*Tox, error) {
 		return nil, ErrUnknown
 	}
 
-	t := &Tox{tox: cTox, cOptions: cOptions}
+	t := &Tox{Toxcore: cTox, cOptions: cOptions}
 	return t, nil
 }
 
@@ -198,29 +204,29 @@ func New(options *Options) (*Tox, error) {
  * from the network.
  * After calling this function `t *TOX` becomes invalid. Do not use it again! */
 func (t *Tox) Kill() error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
 	C.tox_options_free(t.cOptions)
-	C.tox_kill(t.tox)
+	C.tox_kill(t.Toxcore)
 
 	return nil
 }
 
 /* GetSaveDataSize returns the size of the savedata returned by GetSavedata. */
 func (t *Tox) GetSaveDataSize() (uint32, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
-	return uint32(C.tox_get_savedata_size(t.tox)), nil
+	return uint32(C.tox_get_savedata_size(t.Toxcore)), nil
 }
 
 /* GetSavedata returns a byte slice of all information associated with the tox
  * instance. */
 func (t *Tox) GetSavedata() ([]byte, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return nil, ErrToxInit
 	}
 	size, err := t.GetSaveDataSize()
@@ -231,7 +237,7 @@ func (t *Tox) GetSavedata() ([]byte, error) {
 	data := make([]byte, size)
 
 	if size > 0 {
-		C.tox_get_savedata(t.tox, (*C.uint8_t)(&data[0]))
+		C.tox_get_savedata(t.Toxcore, (*C.uint8_t)(&data[0]))
 	}
 
 	return data, nil
@@ -240,7 +246,7 @@ func (t *Tox) GetSavedata() ([]byte, error) {
 /* Bootstrap sends a "get nodes" request to the given bootstrap node with IP,
  * port, and public key to setup connections. */
 func (t *Tox) Bootstrap(address string, port uint16, publickey []byte) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
@@ -252,7 +258,7 @@ func (t *Tox) Bootstrap(address string, port uint16, publickey []byte) error {
 	defer C.free(unsafe.Pointer(caddr))
 
 	var toxErrBootstrap C.TOX_ERR_BOOTSTRAP
-	success := C.tox_bootstrap(t.tox, caddr, (C.uint16_t)(port), (*C.uint8_t)(&publickey[0]), &toxErrBootstrap)
+	success := C.tox_bootstrap(t.Toxcore, caddr, (C.uint16_t)(port), (*C.uint8_t)(&publickey[0]), &toxErrBootstrap)
 
 	switch ToxErrBootstrap(toxErrBootstrap) {
 	case TOX_ERR_BOOTSTRAP_OK:
@@ -275,7 +281,7 @@ func (t *Tox) Bootstrap(address string, port uint16, publickey []byte) error {
 /* AddTCPRelay adds the given node with IP, port, and public key without using
  * it as a boostrap node. */
 func (t *Tox) AddTCPRelay(address string, port uint16, publickey []byte) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
@@ -287,7 +293,7 @@ func (t *Tox) AddTCPRelay(address string, port uint16, publickey []byte) error {
 	defer C.free(unsafe.Pointer(caddr))
 
 	var toxErrBootstrap C.TOX_ERR_BOOTSTRAP
-	success := C.tox_add_tcp_relay(t.tox, caddr, (C.uint16_t)(port), (*C.uint8_t)(&publickey[0]), &toxErrBootstrap)
+	success := C.tox_add_tcp_relay(t.Toxcore, caddr, (C.uint16_t)(port), (*C.uint8_t)(&publickey[0]), &toxErrBootstrap)
 
 	switch ToxErrBootstrap(toxErrBootstrap) {
 	case TOX_ERR_BOOTSTRAP_OK:
@@ -309,21 +315,21 @@ func (t *Tox) AddTCPRelay(address string, port uint16, publickey []byte) error {
 
 /* SelfGetConnectionStatus returns true if Tox is connected to the DHT. */
 func (t *Tox) SelfGetConnectionStatus() (ToxConnection, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return TOX_CONNECTION_NONE, ErrToxInit
 	}
 
-	return ToxConnection(C.tox_self_get_connection_status(t.tox)), nil
+	return ToxConnection(C.tox_self_get_connection_status(t.Toxcore)), nil
 }
 
 /* IterationInterval returns the time in milliseconds before Iterate() should be
  * called again. */
 func (t *Tox) IterationInterval() (uint32, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
-	ret := C.tox_iteration_interval(t.tox)
+	ret := C.tox_iteration_interval(t.Toxcore)
 
 	return uint32(ret), nil
 }
@@ -331,12 +337,12 @@ func (t *Tox) IterationInterval() (uint32, error) {
 /* Iterate is the main loop. It needs to be called every IterationInterval()
  * milliseconds. */
 func (t *Tox) Iterate() error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
 	t.mtx.Lock()
-	C.tox_iterate(t.tox, unsafe.Pointer(t))
+	C.tox_iterate(t.Toxcore, unsafe.Pointer(t))
 	t.mtx.Unlock()
 
 	return nil
@@ -344,63 +350,63 @@ func (t *Tox) Iterate() error {
 
 /* SelfGetAddress returns the public address to give to others. */
 func (t *Tox) SelfGetAddress() ([]byte, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return nil, ErrToxInit
 	}
 
 	address := make([]byte, TOX_ADDRESS_SIZE)
-	C.tox_self_get_address(t.tox, (*C.uint8_t)(&address[0]))
+	C.tox_self_get_address(t.Toxcore, (*C.uint8_t)(&address[0]))
 
 	return address, nil
 }
 
 /* SelfSetNospam sets the nospam of your ID. */
 func (t *Tox) SelfSetNospam(nospam uint32) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
-	C.tox_self_set_nospam(t.tox, (C.uint32_t)(nospam))
+	C.tox_self_set_nospam(t.Toxcore, (C.uint32_t)(nospam))
 	return nil
 }
 
 /* SelfGetNospam returns the nospam of your ID. */
 func (t *Tox) SelfGetNospam() (uint32, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
-	n := C.tox_self_get_nospam(t.tox)
+	n := C.tox_self_get_nospam(t.Toxcore)
 	return uint32(n), nil
 }
 
 /* SelfGetPublicKey returns the publickey of your profile. */
 func (t *Tox) SelfGetPublicKey() ([]byte, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return nil, ErrToxInit
 	}
 
 	publickey := make([]byte, TOX_PUBLIC_KEY_SIZE)
 
-	C.tox_self_get_public_key(t.tox, (*C.uint8_t)(&publickey[0]))
+	C.tox_self_get_public_key(t.Toxcore, (*C.uint8_t)(&publickey[0]))
 	return publickey, nil
 }
 
 /* SelfGetSecretKey returns the secretkey of your profile. */
 func (t *Tox) SelfGetSecretKey() ([]byte, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return nil, ErrToxInit
 	}
 
 	secretkey := make([]byte, TOX_SECRET_KEY_SIZE)
 
-	C.tox_self_get_secret_key(t.tox, (*C.uint8_t)(&secretkey[0]))
+	C.tox_self_get_secret_key(t.Toxcore, (*C.uint8_t)(&secretkey[0]))
 	return secretkey, nil
 }
 
 /* SelfSetName sets your nickname. The maximum name length is MAX_NAME_LENGTH. */
 func (t *Tox) SelfSetName(name string) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
@@ -413,7 +419,7 @@ func (t *Tox) SelfSetName(name string) error {
 	}
 
 	var setInfoError C.TOX_ERR_SET_INFO = C.TOX_ERR_SET_INFO_OK
-	success := C.tox_self_set_name(t.tox, cName, (C.size_t)(len(name)), &setInfoError)
+	success := C.tox_self_set_name(t.Toxcore, cName, (C.size_t)(len(name)), &setInfoError)
 	if !bool(success) || ToxErrSetInfo(setInfoError) != TOX_ERR_SET_INFO_OK {
 		return ErrFuncFail
 	}
@@ -423,18 +429,18 @@ func (t *Tox) SelfSetName(name string) error {
 
 /* SelfGetNameSize returns the length of your name. */
 func (t *Tox) SelfGetNameSize() (int64, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
-	ret := C.tox_self_get_name_size(t.tox)
+	ret := C.tox_self_get_name_size(t.Toxcore)
 
 	return int64(ret), nil
 }
 
 /* SelfGetName returns your nickname. */
 func (t *Tox) SelfGetName() (string, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return "", ErrToxInit
 	}
 
@@ -446,7 +452,7 @@ func (t *Tox) SelfGetName() (string, error) {
 	name := make([]byte, length)
 
 	if length > 0 {
-		C.tox_self_get_name(t.tox, (*C.uint8_t)(&name[0]))
+		C.tox_self_get_name(t.Toxcore, (*C.uint8_t)(&name[0]))
 	}
 
 	return string(name), nil
@@ -455,7 +461,7 @@ func (t *Tox) SelfGetName() (string, error) {
 /* SelfSetStatusMessage sets your status message.
  * The maximum status length is MAX_STATUS_MESSAGE_LENGTH. */
 func (t *Tox) SelfSetStatusMessage(status string) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
@@ -468,7 +474,7 @@ func (t *Tox) SelfSetStatusMessage(status string) error {
 	}
 
 	var setInfoError C.TOX_ERR_SET_INFO = C.TOX_ERR_SET_INFO_OK
-	C.tox_self_set_status_message(t.tox, cStatus, (C.size_t)(len(status)), &setInfoError)
+	C.tox_self_set_status_message(t.Toxcore, cStatus, (C.size_t)(len(status)), &setInfoError)
 
 	if ToxErrSetInfo(setInfoError) != TOX_ERR_SET_INFO_OK {
 		return ErrFuncFail
@@ -479,18 +485,18 @@ func (t *Tox) SelfSetStatusMessage(status string) error {
 
 /* SelfGetStatusMessageSize returns the size of your status message. */
 func (t *Tox) SelfGetStatusMessageSize() (int64, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
-	ret := C.tox_self_get_status_message_size(t.tox)
+	ret := C.tox_self_get_status_message_size(t.Toxcore)
 
 	return int64(ret), nil
 }
 
 /* SelfGetStatusMessage returns your status message. */
 func (t *Tox) SelfGetStatusMessage() (string, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return "", ErrToxInit
 	}
 
@@ -502,7 +508,7 @@ func (t *Tox) SelfGetStatusMessage() (string, error) {
 	statusMessage := make([]byte, length)
 
 	if length > 0 {
-		C.tox_self_get_status_message(t.tox, (*C.uint8_t)(&statusMessage[0]))
+		C.tox_self_get_status_message(t.Toxcore, (*C.uint8_t)(&statusMessage[0]))
 	}
 
 	return string(statusMessage), nil
@@ -510,22 +516,22 @@ func (t *Tox) SelfGetStatusMessage() (string, error) {
 
 /* SelfSetStatus sets your userstatus. */
 func (t *Tox) SelfSetStatus(userstatus ToxUserStatus) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
-	C.tox_self_set_status(t.tox, (C.TOX_USER_STATUS)(userstatus))
+	C.tox_self_set_status(t.Toxcore, (C.TOX_USER_STATUS)(userstatus))
 
 	return nil
 }
 
 /* SelfGetStatus returns your status. */
 func (t *Tox) SelfGetStatus() (ToxUserStatus, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return TOX_USERSTATUS_NONE, ErrToxInit
 	}
 
-	n := C.tox_self_get_status(t.tox)
+	n := C.tox_self_get_status(t.Toxcore)
 
 	return ToxUserStatus(n), nil
 }
@@ -535,7 +541,7 @@ func (t *Tox) SelfGetStatus() (ToxUserStatus, error) {
  * Returns the friend number on success, or a ToxErrFriendAdd on failure.
  */
 func (t *Tox) FriendAdd(address []byte, message string) (uint32, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
@@ -547,7 +553,7 @@ func (t *Tox) FriendAdd(address []byte, message string) (uint32, error) {
 	cmessage := (*C.uint8_t)(&[]byte(message)[0])
 
 	var toxErrFriendAdd C.TOX_ERR_FRIEND_ADD
-	ret := C.tox_friend_add(t.tox, caddr, cmessage, (C.size_t)(len(message)), &toxErrFriendAdd)
+	ret := C.tox_friend_add(t.Toxcore, caddr, cmessage, (C.size_t)(len(message)), &toxErrFriendAdd)
 
 	switch ToxErrFriendAdd(toxErrFriendAdd) {
 	case TOX_ERR_FRIEND_ADD_OK:
@@ -579,7 +585,7 @@ func (t *Tox) FriendAdd(address []byte, message string) (uint32, error) {
  * Returns the friend number on success.
  */
 func (t *Tox) FriendAddNorequest(publickey []byte) (uint32, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return C.UINT32_MAX, ErrToxInit
 	}
 
@@ -588,7 +594,7 @@ func (t *Tox) FriendAddNorequest(publickey []byte) (uint32, error) {
 	}
 
 	var toxErrFriendAdd C.TOX_ERR_FRIEND_ADD
-	ret := C.tox_friend_add_norequest(t.tox, (*C.uint8_t)(&publickey[0]), &toxErrFriendAdd)
+	ret := C.tox_friend_add_norequest(t.Toxcore, (*C.uint8_t)(&publickey[0]), &toxErrFriendAdd)
 	if ret == C.UINT32_MAX {
 		return C.UINT32_MAX, ErrFuncFail
 	}
@@ -621,12 +627,12 @@ func (t *Tox) FriendAddNorequest(publickey []byte) (uint32, error) {
 
 /* FriendDelete removes a friend. */
 func (t *Tox) FriendDelete(friendNumber uint32) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
 	var toxErrFriendDelete C.TOX_ERR_FRIEND_DELETE = C.TOX_ERR_FRIEND_DELETE_OK
-	C.tox_friend_delete(t.tox, (C.uint32_t)(friendNumber), &toxErrFriendDelete)
+	C.tox_friend_delete(t.Toxcore, (C.uint32_t)(friendNumber), &toxErrFriendDelete)
 
 	switch ToxErrFriendDelete(toxErrFriendDelete) {
 	case TOX_ERR_FRIEND_DELETE_OK:
@@ -642,7 +648,7 @@ func (t *Tox) FriendDelete(friendNumber uint32) error {
 
 /* FriendByPublicKey returns the friend number associated to a given publickey. */
 func (t *Tox) FriendByPublicKey(publickey []byte) (uint32, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return C.UINT32_MAX, ErrToxInit
 	}
 
@@ -651,7 +657,7 @@ func (t *Tox) FriendByPublicKey(publickey []byte) (uint32, error) {
 	}
 
 	var toxErrFriendByPublicKey C.TOX_ERR_FRIEND_BY_PUBLIC_KEY
-	n := C.tox_friend_by_public_key(t.tox, (*C.uint8_t)(&publickey[0]), &toxErrFriendByPublicKey)
+	n := C.tox_friend_by_public_key(t.Toxcore, (*C.uint8_t)(&publickey[0]), &toxErrFriendByPublicKey)
 
 	switch ToxErrFriendByPublicKey(toxErrFriendByPublicKey) {
 	case TOX_ERR_FRIEND_BY_PUBLIC_KEY_OK:
@@ -667,28 +673,28 @@ func (t *Tox) FriendByPublicKey(publickey []byte) (uint32, error) {
 
 /* FriendExists returns true if a friend exists with given friendNumber. */
 func (t *Tox) FriendExists(friendNumber uint32) (bool, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return false, ErrToxInit
 	}
 
-	success := C.tox_friend_exists(t.tox, (C.uint32_t)(friendNumber))
+	success := C.tox_friend_exists(t.Toxcore, (C.uint32_t)(friendNumber))
 
 	return bool(success), nil
 }
 
 /* SelfGetFriendlistSize returns the number of friends on the friendlist. */
 func (t *Tox) SelfGetFriendlistSize() (int64, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
-	n := C.tox_self_get_friend_list_size(t.tox)
+	n := C.tox_self_get_friend_list_size(t.Toxcore)
 
 	return int64(n), nil
 }
 
 /* SelfGetFriendlist returns a slice of uint32 containing the friendNumbers. */
 func (t *Tox) SelfGetFriendlist() ([]uint32, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return nil, ErrToxInit
 	}
 
@@ -700,7 +706,7 @@ func (t *Tox) SelfGetFriendlist() ([]uint32, error) {
 	friendlist := make([]uint32, size)
 
 	if size > 0 {
-		C.tox_self_get_friend_list(t.tox, (*C.uint32_t)(&friendlist[0]))
+		C.tox_self_get_friend_list(t.Toxcore, (*C.uint32_t)(&friendlist[0]))
 	}
 
 	return friendlist, nil
@@ -708,12 +714,12 @@ func (t *Tox) SelfGetFriendlist() ([]uint32, error) {
 
 /* FriendGetPublickey returns the publickey associated to that friendNumber. */
 func (t *Tox) FriendGetPublickey(friendNumber uint32) ([]byte, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return nil, ErrToxInit
 	}
 	publickey := make([]byte, TOX_PUBLIC_KEY_SIZE)
 	var toxErrFriendGetPublicKey C.TOX_ERR_FRIEND_GET_PUBLIC_KEY = C.TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK
-	C.tox_friend_get_public_key(t.tox, (C.uint32_t)(friendNumber), (*C.uint8_t)(&publickey[0]), &toxErrFriendGetPublicKey)
+	C.tox_friend_get_public_key(t.Toxcore, (C.uint32_t)(friendNumber), (*C.uint8_t)(&publickey[0]), &toxErrFriendGetPublicKey)
 
 	switch ToxErrFriendGetPublicKey(toxErrFriendGetPublicKey) {
 	case TOX_ERR_FRIEND_GET_PUBLIC_KEY_OK:
@@ -730,12 +736,12 @@ func (t *Tox) FriendGetPublickey(friendNumber uint32) ([]byte, error) {
 /* FriendGetLastOnline returns the timestamp of the last time the friend with
  * the given friendNumber was seen online. */
 func (t *Tox) FriendGetLastOnline(friendNumber uint32) (time.Time, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return time.Time{}, ErrToxInit
 	}
 
 	var toxErrFriendGetLastOnline C.TOX_ERR_FRIEND_GET_LAST_ONLINE = C.TOX_ERR_FRIEND_GET_LAST_ONLINE_OK
-	ret := C.tox_friend_get_last_online(t.tox, (C.uint32_t)(friendNumber), &toxErrFriendGetLastOnline)
+	ret := C.tox_friend_get_last_online(t.Toxcore, (C.uint32_t)(friendNumber), &toxErrFriendGetLastOnline)
 
 	if ret == C.INT64_MAX || ToxErrFriendGetLastOnline(toxErrFriendGetLastOnline) != TOX_ERR_FRIEND_GET_LAST_ONLINE_OK {
 		return time.Time{}, ErrFuncFail
@@ -748,12 +754,12 @@ func (t *Tox) FriendGetLastOnline(friendNumber uint32) (time.Time, error) {
 
 /* FriendGetNameSize returns the length of the name of friendNumber. */
 func (t *Tox) FriendGetNameSize(friendNumber uint32) (int64, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
 	var toxErrFriendQuery C.TOX_ERR_FRIEND_QUERY = C.TOX_ERR_FRIEND_QUERY_OK
-	ret := C.tox_friend_get_name_size(t.tox, (C.uint32_t)(friendNumber), &toxErrFriendQuery)
+	ret := C.tox_friend_get_name_size(t.Toxcore, (C.uint32_t)(friendNumber), &toxErrFriendQuery)
 
 	if ToxErrFriendQuery(toxErrFriendQuery) != TOX_ERR_FRIEND_QUERY_OK {
 		return 0, ErrFuncFail
@@ -764,7 +770,7 @@ func (t *Tox) FriendGetNameSize(friendNumber uint32) (int64, error) {
 
 /* FriendGetName returns the name of friendNumber. */
 func (t *Tox) FriendGetName(friendNumber uint32) (string, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return "", ErrToxInit
 	}
 
@@ -777,7 +783,7 @@ func (t *Tox) FriendGetName(friendNumber uint32) (string, error) {
 
 	if length > 0 {
 		var toxErrFriendQuery C.TOX_ERR_FRIEND_QUERY = C.TOX_ERR_FRIEND_QUERY_OK
-		success := C.tox_friend_get_name(t.tox, (C.uint32_t)(friendNumber), (*C.uint8_t)(&name[0]), &toxErrFriendQuery)
+		success := C.tox_friend_get_name(t.Toxcore, (C.uint32_t)(friendNumber), (*C.uint8_t)(&name[0]), &toxErrFriendQuery)
 
 		if success != true || ToxErrFriendQuery(toxErrFriendQuery) != TOX_ERR_FRIEND_QUERY_OK {
 			return "", ErrFuncFail
@@ -791,12 +797,12 @@ func (t *Tox) FriendGetName(friendNumber uint32) (string, error) {
  * the given friendNumber.
  */
 func (t *Tox) FriendGetStatusMessageSize(friendNumber uint32) (int64, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
 	var toxErrFriendQuery C.TOX_ERR_FRIEND_QUERY = C.TOX_ERR_FRIEND_QUERY_OK
-	ret := C.tox_friend_get_status_message_size(t.tox, (C.uint32_t)(friendNumber), &toxErrFriendQuery)
+	ret := C.tox_friend_get_status_message_size(t.Toxcore, (C.uint32_t)(friendNumber), &toxErrFriendQuery)
 
 	if ToxErrFriendQuery(toxErrFriendQuery) != TOX_ERR_FRIEND_QUERY_OK {
 		return 0, ErrFuncFail
@@ -809,7 +815,7 @@ func (t *Tox) FriendGetStatusMessageSize(friendNumber uint32) (int64, error) {
  * friendNumber.
  */
 func (t *Tox) FriendGetStatusMessage(friendNumber uint32) (string, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return "", ErrToxInit
 	}
 
@@ -824,7 +830,7 @@ func (t *Tox) FriendGetStatusMessage(friendNumber uint32) (string, error) {
 
 	if size > 0 {
 		toxErrFriendQuery = C.TOX_ERR_FRIEND_QUERY_OK
-		n := C.tox_friend_get_status_message(t.tox, (C.uint32_t)(friendNumber), (*C.uint8_t)(&statusMessage[0]), &toxErrFriendQuery)
+		n := C.tox_friend_get_status_message(t.Toxcore, (C.uint32_t)(friendNumber), (*C.uint8_t)(&statusMessage[0]), &toxErrFriendQuery)
 
 		if n != true || ToxErrFriendQuery(toxErrFriendQuery) != TOX_ERR_FRIEND_QUERY_OK {
 			return "", ErrFuncFail
@@ -836,12 +842,12 @@ func (t *Tox) FriendGetStatusMessage(friendNumber uint32) (string, error) {
 
 /* FriendGetStatus returns the status of friendNumber. */
 func (t *Tox) FriendGetStatus(friendNumber uint32) (ToxUserStatus, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return TOX_USERSTATUS_NONE, ErrToxInit
 	}
 
 	var toxErrFriendQuery C.TOX_ERR_FRIEND_QUERY = C.TOX_ERR_FRIEND_QUERY_OK
-	status := C.tox_friend_get_status(t.tox, (C.uint32_t)(friendNumber), &toxErrFriendQuery)
+	status := C.tox_friend_get_status(t.Toxcore, (C.uint32_t)(friendNumber), &toxErrFriendQuery)
 
 	if ToxErrFriendQuery(toxErrFriendQuery) != TOX_ERR_FRIEND_QUERY_OK {
 		return TOX_USERSTATUS_NONE, ErrFuncFail
@@ -852,12 +858,12 @@ func (t *Tox) FriendGetStatus(friendNumber uint32) (ToxUserStatus, error) {
 
 /* FriendGetConnectionStatus returns true if the friend is connected. */
 func (t *Tox) FriendGetConnectionStatus(friendNumber uint32) (ToxConnection, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return TOX_CONNECTION_NONE, ErrToxInit
 	}
 
 	var toxErrFriendQuery C.TOX_ERR_FRIEND_QUERY = C.TOX_ERR_FRIEND_QUERY_OK
-	status := C.tox_friend_get_connection_status(t.tox, (C.uint32_t)(friendNumber), &toxErrFriendQuery)
+	status := C.tox_friend_get_connection_status(t.Toxcore, (C.uint32_t)(friendNumber), &toxErrFriendQuery)
 
 	if ToxErrFriendQuery(toxErrFriendQuery) != TOX_ERR_FRIEND_QUERY_OK {
 		return TOX_CONNECTION_NONE, ErrFuncFail
@@ -868,12 +874,12 @@ func (t *Tox) FriendGetConnectionStatus(friendNumber uint32) (ToxConnection, err
 
 /* FriendGetTyping returns true if friendNumber is typing. */
 func (t *Tox) FriendGetTyping(friendNumber uint32) (bool, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return false, ErrToxInit
 	}
 
 	var toxErrFriendQuery C.TOX_ERR_FRIEND_QUERY = C.TOX_ERR_FRIEND_QUERY_OK
-	istyping := C.tox_friend_get_typing(t.tox, (C.uint32_t)(friendNumber), &toxErrFriendQuery)
+	istyping := C.tox_friend_get_typing(t.Toxcore, (C.uint32_t)(friendNumber), &toxErrFriendQuery)
 
 	if ToxErrFriendQuery(toxErrFriendQuery) != TOX_ERR_FRIEND_QUERY_OK {
 		return false, ErrFuncFail
@@ -884,12 +890,12 @@ func (t *Tox) FriendGetTyping(friendNumber uint32) (bool, error) {
 
 /* SelfSetTyping sets your typing status to a friend. */
 func (t *Tox) SelfSetTyping(friendNumber uint32, typing bool) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
 	var toxErrSetTyping C.TOX_ERR_SET_TYPING = C.TOX_ERR_SET_TYPING_OK
-	success := C.tox_self_set_typing(t.tox, (C.uint32_t)(friendNumber), (C._Bool)(typing), &toxErrSetTyping)
+	success := C.tox_self_set_typing(t.Toxcore, (C.uint32_t)(friendNumber), (C._Bool)(typing), &toxErrSetTyping)
 
 	if !bool(success) || ToxErrSetTyping(toxErrSetTyping) != TOX_ERR_SET_TYPING_OK {
 		return ErrFuncFail
@@ -903,8 +909,8 @@ func (t *Tox) SelfSetTyping(friendNumber uint32, typing bool) error {
  * messagetype is the type of the message (normal, action, ...).
  * Returns the message ID if successful, an error otherwise.
  */
-func (t *Tox) FriendSendMessage(friendNumber uint32, messagetype ToxMessageType, message string) (uint32, error) {
-	if t.tox == nil {
+func (t *Tox) FriendSendMessage(friendNumber uint32, messagetype ToxMessageType, message []byte) (uint32, error) {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
@@ -922,7 +928,7 @@ func (t *Tox) FriendSendMessage(friendNumber uint32, messagetype ToxMessageType,
 	cMessage := (*C.uint8_t)(&[]byte(message)[0])
 
 	var toxFriendSendMessageError C.TOX_ERR_FRIEND_SEND_MESSAGE = C.TOX_ERR_FRIEND_SEND_MESSAGE_OK
-	n := C.tox_friend_send_message(t.tox, (C.uint32_t)(friendNumber), cMessageType, cMessage, (C.size_t)(len(message)), &toxFriendSendMessageError)
+	n := C.tox_friend_send_message(t.Toxcore, (C.uint32_t)(friendNumber), cMessageType, cMessage, (C.size_t)(len(message)), &toxFriendSendMessageError)
 
 	if ToxErrFriendSendMessage(toxFriendSendMessageError) != TOX_ERR_FRIEND_SEND_MESSAGE_OK {
 		return 0, ErrFuncFail
@@ -934,7 +940,7 @@ func (t *Tox) FriendSendMessage(friendNumber uint32, messagetype ToxMessageType,
 /* Hash generates a cryptographic hash of the given data (can be used to cache
  * avatars). */
 func (t *Tox) Hash(data []byte) ([]byte, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return nil, ErrToxInit
 	}
 
@@ -958,7 +964,7 @@ func (t *Tox) Hash(data []byte) ([]byte, error) {
 
 /* FileControl sends a FileControl to a friend with the given friendNumber. */
 func (t *Tox) FileControl(friendNumber uint32, fileNumber uint32, fileControl ToxFileControl) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
@@ -973,7 +979,7 @@ func (t *Tox) FileControl(friendNumber uint32, fileNumber uint32, fileControl To
 	}
 
 	var toxErrFileControl C.TOX_ERR_FILE_CONTROL
-	success := C.tox_file_control(t.tox, (C.uint32_t)(friendNumber), (C.uint32_t)(fileNumber), cFileControl, &toxErrFileControl)
+	success := C.tox_file_control(t.Toxcore, (C.uint32_t)(friendNumber), (C.uint32_t)(fileNumber), cFileControl, &toxErrFileControl)
 
 	if !bool(success) || ToxErrFileControl(toxErrFileControl) != TOX_ERR_FILE_CONTROL_OK {
 		return ErrFuncFail
@@ -985,12 +991,12 @@ func (t *Tox) FileControl(friendNumber uint32, fileNumber uint32, fileControl To
 /* FileSeek sends a file seek control command to a friend for a given file
  * transfer. */
 func (t *Tox) FileSeek(friendNumber uint32, fileNumber uint32, position uint64) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
 	var toxErrFileSeek C.TOX_ERR_FILE_SEEK
-	success := C.tox_file_seek(t.tox, C.uint32_t(friendNumber), C.uint32_t(fileNumber), C.uint64_t(position), &toxErrFileSeek)
+	success := C.tox_file_seek(t.Toxcore, C.uint32_t(friendNumber), C.uint32_t(fileNumber), C.uint64_t(position), &toxErrFileSeek)
 
 	if !bool(success) || ToxErrFileSeek(toxErrFileSeek) != TOX_ERR_FILE_SEEK_OK {
 		return ErrFuncFail
@@ -1001,14 +1007,14 @@ func (t *Tox) FileSeek(friendNumber uint32, fileNumber uint32, position uint64) 
 
 /* FileGetFileId returns the file id associated to the file transfer. */
 func (t *Tox) FileGetFileId(friendNumber uint32, fileNumber uint32) ([]byte, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return nil, ErrToxInit
 	}
 
 	fileId := make([]byte, TOX_FILE_ID_LENGTH)
 
 	var toxErrFileGet C.TOX_ERR_FILE_GET
-	success := C.tox_file_get_file_id(t.tox, C.uint32_t(friendNumber), C.uint32_t(fileNumber), (*C.uint8_t)(&fileId[0]), &toxErrFileGet)
+	success := C.tox_file_get_file_id(t.Toxcore, C.uint32_t(friendNumber), C.uint32_t(fileNumber), (*C.uint8_t)(&fileId[0]), &toxErrFileGet)
 	if !bool(success) || ToxErrFileGet(toxErrFileGet) != TOX_ERR_FILE_GET_OK {
 		return nil, ErrFuncFail
 	}
@@ -1018,7 +1024,7 @@ func (t *Tox) FileGetFileId(friendNumber uint32, fileNumber uint32) ([]byte, err
 
 /* FileSend sends a file transmission request. */
 func (t *Tox) FileSend(friendNumber uint32, fileKind ToxFileKind, fileLength uint64, fileID []byte, fileName string) (uint32, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
@@ -1049,7 +1055,7 @@ func (t *Tox) FileSend(friendNumber uint32, fileKind ToxFileKind, fileLength uin
 	cFileName := (*C.uint8_t)(&[]byte(fileName)[0])
 
 	var toxErrFileSend C.TOX_ERR_FILE_SEND
-	n := C.tox_file_send(t.tox, (C.uint32_t)(friendNumber), (C.uint32_t)(cFileKind), (C.uint64_t)(fileLength), cFileID, cFileName, (C.size_t)(len(fileName)), &toxErrFileSend)
+	n := C.tox_file_send(t.Toxcore, (C.uint32_t)(friendNumber), (C.uint32_t)(cFileKind), (C.uint64_t)(fileLength), cFileID, cFileName, (C.size_t)(len(fileName)), &toxErrFileSend)
 
 	if n == C.UINT32_MAX || ToxErrFileSend(toxErrFileSend) != TOX_ERR_FILE_SEND_OK {
 		return 0, ErrFuncFail
@@ -1059,7 +1065,7 @@ func (t *Tox) FileSend(friendNumber uint32, fileKind ToxFileKind, fileLength uin
 
 /* FileSendChunk sends a chunk of file data to a friend. */
 func (t *Tox) FileSendChunk(friendNumber uint32, fileNumber uint32, position uint64, data []byte) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
@@ -1072,7 +1078,7 @@ func (t *Tox) FileSendChunk(friendNumber uint32, fileNumber uint32, position uin
 	}
 
 	var toxErrFileSendChunk C.TOX_ERR_FILE_SEND_CHUNK
-	success := C.tox_file_send_chunk(t.tox, (C.uint32_t)(friendNumber), (C.uint32_t)(fileNumber), (C.uint64_t)(position), cData, (C.size_t)(len(data)), &toxErrFileSendChunk)
+	success := C.tox_file_send_chunk(t.Toxcore, (C.uint32_t)(friendNumber), (C.uint32_t)(fileNumber), (C.uint64_t)(position), cData, (C.size_t)(len(data)), &toxErrFileSendChunk)
 
 	if !bool(success) || ToxErrFileSendChunk(toxErrFileSendChunk) != TOX_ERR_FILE_SEND_CHUNK_OK {
 		return ErrFuncFail
@@ -1084,7 +1090,7 @@ func (t *Tox) FileSendChunk(friendNumber uint32, fileNumber uint32, position uin
  * The first byte of data must be in the range 200-254. Maximum length of a
  * custom packet is TOX_MAX_CUSTOM_PACKET_SIZE. */
 func (t *Tox) FriendSendLossyPacket(friendNumber uint32, data []byte) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
@@ -1097,7 +1103,7 @@ func (t *Tox) FriendSendLossyPacket(friendNumber uint32, data []byte) error {
 	}
 
 	var toxErrFriendCustomPacket C.TOX_ERR_FRIEND_CUSTOM_PACKET
-	C.tox_friend_send_lossy_packet(t.tox, C.uint32_t(friendNumber), cData, C.size_t(len(data)), &toxErrFriendCustomPacket)
+	C.tox_friend_send_lossy_packet(t.Toxcore, C.uint32_t(friendNumber), cData, C.size_t(len(data)), &toxErrFriendCustomPacket)
 
 	switch ToxErrFriendCustomPacket(toxErrFriendCustomPacket) {
 	case TOX_ERR_FRIEND_CUSTOM_PACKET_OK:
@@ -1115,7 +1121,7 @@ func (t *Tox) FriendSendLossyPacket(friendNumber uint32, data []byte) error {
  * The first byte of data must be in the range 160-191. Maximum length of a
  * custom packet is TOX_MAX_CUSTOM_PACKET_SIZE. */
 func (t *Tox) FriendSendLosslessPacket(friendNumber uint32, data []byte) error {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return ErrToxInit
 	}
 
@@ -1128,7 +1134,7 @@ func (t *Tox) FriendSendLosslessPacket(friendNumber uint32, data []byte) error {
 	}
 
 	var toxErrFriendCustomPacket C.TOX_ERR_FRIEND_CUSTOM_PACKET
-	C.tox_friend_send_lossless_packet(t.tox, C.uint32_t(friendNumber), cData, C.size_t(len(data)), &toxErrFriendCustomPacket)
+	C.tox_friend_send_lossless_packet(t.Toxcore, C.uint32_t(friendNumber), cData, C.size_t(len(data)), &toxErrFriendCustomPacket)
 
 	switch ToxErrFriendCustomPacket(toxErrFriendCustomPacket) {
 	case TOX_ERR_FRIEND_CUSTOM_PACKET_OK:
@@ -1144,24 +1150,24 @@ func (t *Tox) FriendSendLosslessPacket(friendNumber uint32, data []byte) error {
 
 /* SelfGetDhtId returns the temporary DHT public key of this instance. */
 func (t *Tox) SelfGetDhtId() ([]byte, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return nil, ErrToxInit
 	}
 
 	publickey := make([]byte, TOX_PUBLIC_KEY_SIZE)
 
-	C.tox_self_get_dht_id(t.tox, (*C.uint8_t)(&publickey[0]))
+	C.tox_self_get_dht_id(t.Toxcore, (*C.uint8_t)(&publickey[0]))
 	return publickey, nil
 }
 
 /* SelfGetUDPPort returns the UDP port the Tox instance is bound to. */
 func (t *Tox) SelfGetUDPPort() (uint16, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
 	var toxErrGetPort C.TOX_ERR_GET_PORT
-	port := C.tox_self_get_udp_port(t.tox, &toxErrGetPort)
+	port := C.tox_self_get_udp_port(t.Toxcore, &toxErrGetPort)
 
 	if ToxErrGetPort(toxErrGetPort) != TOX_ERR_GET_PORT_OK {
 		return 0, ErrFuncFail
@@ -1173,12 +1179,12 @@ func (t *Tox) SelfGetUDPPort() (uint16, error) {
 /* SelfGetTCPPort returns the TCP port the Tox instance is bound to. This is
  * only relevant if the instance is acting as a TCP relay. */
 func (t *Tox) SelfGetTCPPort() (uint16, error) {
-	if t.tox == nil {
+	if t.Toxcore == nil {
 		return 0, ErrToxInit
 	}
 
 	var toxErrGetPort C.TOX_ERR_GET_PORT
-	port := C.tox_self_get_tcp_port(t.tox, &toxErrGetPort)
+	port := C.tox_self_get_tcp_port(t.Toxcore, &toxErrGetPort)
 
 	if ToxErrGetPort(toxErrGetPort) != TOX_ERR_GET_PORT_OK {
 		return 0, ErrFuncFail
@@ -1187,154 +1193,399 @@ func (t *Tox) SelfGetTCPPort() (uint16, error) {
 	return uint16(port), nil
 }
 
-//=================
-
-/*
- * Functions to register the callbacks.
- */
-
-// CallbackSelfConnectionStatusChanges sets the function to be called when self connection status changed.
-func (t *Tox) CallbackSelfConnectionStatusChanges(f OnSelfConnectionStatusChanges) {
-	if t.tox != nil {
-		t.onSelfConnectionStatusChanges = f
-		C.set_callback_self_connection_status(t.tox, unsafe.Pointer(t))
+// =================
+// ConferenceNew creates and connects to a new text conference.
+func (t *Tox) ConferenceNew() (uint32, error) {
+	if t.Toxcore == nil {
+		return 0, ErrToxInit
 	}
+
+	var toxErrConferenceNew C.Tox_Err_Conference_New
+	conferenceNumber := C.tox_conference_new(t.Toxcore, &toxErrConferenceNew)
+
+	switch ToxErrConferenceNew(toxErrConferenceNew) {
+	case TOX_ERR_CONFERENCE_NEW_OK:
+		return uint32(conferenceNumber), nil
+	case TOX_ERR_CONFERENCE_NEW_INIT:
+		return uint32(conferenceNumber), ErrConferenceNewFailedInitialize
+	default:
+		return uint32(conferenceNumber), ErrFuncFail
+	}
+
+	return uint32(conferenceNumber), ErrUnknown
 }
 
-// CallbackFriendNameChanges sets the function to be called for friend's name changed.
-func (t *Tox) CallbackFriendNameChanges(f OnFriendNameChanges) {
-	if t.tox != nil {
-		t.onFriendNameChanges = f
-		C.set_callback_friend_name(t.tox, unsafe.Pointer(t))
+// ConferenceDelete this function deletes a conference.
+func (t *Tox) ConferenceDelete(conferenceNumber uint32) (bool, error) {
+	if t.Toxcore == nil {
+		return false, ErrToxInit
 	}
+
+	var toxErrConferenceDelete C.Tox_Err_Conference_Delete
+	ret := C.tox_conference_delete(t.Toxcore, (C.uint32_t)(conferenceNumber), &toxErrConferenceDelete)
+	if !bool(ret) {
+		return bool(ret), ErrConferenceDeleteFailed
+	}
+	switch ToxErrConferenceDelete(toxErrConferenceDelete) {
+	case TOX_ERR_CONFERENCE_DELETE_OK:
+		return true, nil
+	case TOX_ERR_CONFERENCE_DELETE_CONFERENCE_NOT_FOUND:
+		return false, ErrConferenceDeleteConferenceNotFound
+	default:
+		return false, ErrFuncFail
+	}
+
+	return false, ErrUnknown
 }
 
-// CallbackFriendStatusMessageChanges sets the function to be called when friend's status message changed.
-func (t *Tox) CallbackFriendStatusMessageChanges(f OnFriendStatusMessageChanges) {
-	if t.tox != nil {
-		t.onFriendStatusMessageChanges = f
-		C.set_callback_friend_status_message(t.tox, unsafe.Pointer(t))
+// ConferencePeerGetName
+func (t *Tox) ConferencePeerGetName(conferenceNumber, peerNumber uint32) (string, error) {
+	if t.Toxcore == nil {
+		return "", ErrToxInit
 	}
+	length, err := t.ConferencePeerGetNameSize(conferenceNumber, peerNumber)
+	if err != nil {
+		return "", ErrFuncFail
+	}
+	name := make([]byte, length)
+	if length > 0 {
+		var toxErrConferencePeerQuery C.Tox_Err_Conference_Peer_Query = C.TOX_ERR_CONFERENCE_PEER_QUERY_OK
+		ret := C.tox_conference_peer_get_name(t.Toxcore, (C.uint32_t)(conferenceNumber), (C.uint32_t)(peerNumber), (*C.uint8_t)(&name[0]), &toxErrConferencePeerQuery)
+		if ret != true || ToxErrConferencePeerQuery(toxErrConferencePeerQuery) != TOX_ERR_CONFERENCE_PEER_QUERY_OK {
+			return "", ErrFuncFail
+		}
+	}
+
+	return string(name), nil
 }
 
-// CallbackFriendStatusChanges sets the function to be called when friend's status changed.
-func (t *Tox) CallbackFriendStatusChanges(f OnFriendStatusChanges) {
-	if t.tox != nil {
-		t.onFriendStatusChanges = f
-		C.set_callback_friend_status(t.tox, unsafe.Pointer(t))
+func (t *Tox) ConferencePeerGetNameSize(conferenceNumber, peerNumber uint32) (int64, error) {
+	if t.Toxcore == nil {
+		return 0, ErrToxInit
 	}
+	var toxErrConferencePeerQuery C.Tox_Err_Conference_Peer_Query = C.TOX_ERR_CONFERENCE_PEER_QUERY_OK
+	ret := C.tox_conference_peer_get_name_size(t.Toxcore, (C.uint32_t)(conferenceNumber), (C.uint32_t)(peerNumber), &toxErrConferencePeerQuery)
+	if ToxErrConferencePeerQuery(toxErrConferencePeerQuery) != TOX_ERR_CONFERENCE_PEER_QUERY_OK {
+		return 0, ErrFuncFail
+	}
+	return int64(ret), nil
 }
 
-// CallbackFriendConnectionStatusChanges sets the function to be called when friend's connection status changed.
-func (t *Tox) CallbackFriendConnectionStatusChanges(f OnFriendConnectionStatusChanges) {
-	if t.tox != nil {
-		t.onFriendConnectionStatusChanges = f
-		C.set_callback_friend_connection_status(t.tox, unsafe.Pointer(t))
+func (t *Tox) ConferencePeerGetPublicKey(conferenceNumber uint32, peerNumber uint32) (string, error) {
+	if t.Toxcore == nil {
+		return "", ErrToxInit
 	}
+	publickey := make([]byte, TOX_PUBLIC_KEY_SIZE)
+	var toxErrConferencePeerQuery C.Tox_Err_Conference_Peer_Query
+	r := C.tox_conference_peer_get_public_key(t.Toxcore, (C.uint32_t)(conferenceNumber), (C.uint32_t)(peerNumber), (*C.uint8_t)(&publickey[0]), &toxErrConferencePeerQuery)
+	if bool(r) != true || ToxErrConferencePeerQuery(toxErrConferencePeerQuery) != TOX_ERR_CONFERENCE_PEER_QUERY_OK {
+		return "", ErrFuncFail
+	}
+
+	pubkey := strings.ToUpper(hex.EncodeToString(publickey[:]))
+	return pubkey, nil
 }
 
-// CallbackFriendTypingChanges sets the function to be called when friend's typing changed.
-func (t *Tox) CallbackFriendTypingChanges(f OnFriendTypingChanges) {
-	if t.tox != nil {
-		t.onFriendTypingChanges = f
-		C.set_callback_friend_typing(t.tox, unsafe.Pointer(t))
+func (t *Tox) ConferenceInvite(friendNumber uint32, conferenceNumber uint32) (int, error) {
+	if t.Toxcore == nil {
+		return -2, ErrToxInit
 	}
+	// if give a friendNumber which not exists,the tox_invite_friend has a strange behaive: cause other tox_* call failed
+	// and the call will return true, but only strange thing accurs so just precheck the friendNumber and then go
+	friendExist, err := t.FriendExists(friendNumber)
+	if err != nil || friendExist == false {
+		return -1, errors.New(fmt.Sprintf("friend not exists: %d", friendNumber))
+	}
+
+	var toxErrConferenceInvite C.Tox_Err_Conference_Invite
+	r := C.tox_conference_invite(t.Toxcore, (C.uint32_t)(friendNumber), (C.uint32_t)(conferenceNumber), &toxErrConferenceInvite)
+	if r == false {
+		return 0, errors.New(fmt.Sprintf("conference invite failed: %d", toxErrConferenceInvite))
+	}
+	switch ToxErrConferenceInvite(toxErrConferenceInvite) {
+	case TOX_ERR_CONFERENCE_INVITE_OK:
+		return 1, nil
+	case TOX_ERR_CONFERENCE_INVITE_CONFERENCE_NOT_FOUND:
+		return 0, ErrConferenceInviteConferenceNotFound
+	case TOX_ERR_CONFERENCE_INVITE_FAIL_SEND:
+		return 0, ErrConferenceInviteFailSend
+	case TOX_ERR_CONFERENCE_INVITE_NO_CONNECTION:
+		return 0, ErrConferenceInviteNoConnection
+	default:
+		return 0, ErrFuncFail
+	}
+
+	return 0, ErrUnknown
 }
 
-// CallbackFriendReadReceipt sets the function to be called when receiving read receipts.
-func (t *Tox) CallbackFriendReadReceipt(f OnFriendReadReceipt) {
-	if t.tox != nil {
-		t.onFriendReadReceipt = f
-		C.set_callback_friend_read_receipt(t.tox, unsafe.Pointer(t))
+/*func (t *Tox) FriendExists(friendNumber uint32) bool {
+	r := C.tox_friend_exists(t.Toxcore, (C.uint32_t)(friendNumber))
+	return bool(r)
+}*/
+
+func (t *Tox) ConferenceJoin(friendNumber uint32, cookie []byte) (uint32, error) {
+	if t.Toxcore == nil {
+		return 0, ErrToxInit
 	}
+
+	if string(cookie) == "" || len(cookie) < 20 {
+		return 0, errors.New("Invalid cookie:" + string(cookie))
+	}
+
+	//data, err := hex.DecodeString(cookie)
+	data := []byte(cookie)
+	fmt.Println(len(data))
+	//fmt.Println(err)
+	if data == nil { // || len(data) < 10
+		return 0, errors.New("Invalid data: " + string(cookie))
+	}
+
+	var toxErrConferenceJoin C.Tox_Err_Conference_Join
+	ret := C.tox_conference_join(t.Toxcore, (C.uint32_t)(friendNumber), (*C.uint8_t)(&data[0]), (C.size_t)(len(data)), &toxErrConferenceJoin)
+	if ret == C.UINT32_MAX {
+		return uint32(ret), errors.New(fmt.Sprintf("join group chat failed: %d", toxErrConferenceJoin))
+	}
+
+	return uint32(ret), nil
 }
 
-// CallbackFriendRequest sets the function to be called when friend's request receipts.
-func (t *Tox) CallbackFriendRequest(f OnFriendRequest) {
-	if t.tox != nil {
-		t.onFriendRequest = f
-		C.set_callback_friend_request(t.tox, unsafe.Pointer(t))
+func (t *Tox) ConferenceSendMessage(conferenceNumber uint32, messageType ToxMessageType, message []byte) (bool, error) {
+	if t.Toxcore == nil {
+		return false, ErrToxInit
 	}
+
+	if len(message) == 0 {
+		return false, ErrArgs
+	}
+
+	var cMessageType C.TOX_MESSAGE_TYPE
+	if messageType == TOX_MESSAGE_TYPE_ACTION {
+		cMessageType = C.TOX_MESSAGE_TYPE_ACTION
+	} else {
+		cMessageType = C.TOX_MESSAGE_TYPE_NORMAL
+	}
+	cMessage := (*C.uint8_t)(&[]byte(message)[0])
+
+	var toxErrConferenceSendMessage C.Tox_Err_Conference_Send_Message
+	ret := C.tox_conference_send_message(t.Toxcore, (C.uint32_t)(conferenceNumber), cMessageType, cMessage, (C.size_t)(len(message)), &toxErrConferenceSendMessage)
+	if ret == false {
+		return false, errors.New(fmt.Sprintf("group send message failed: %d", toxErrConferenceSendMessage))
+	}
+	if ToxErrConferenceSendMessage(toxErrConferenceSendMessage) != TOX_ERR_CONFERENCE_SEND_MESSAGE_OK {
+		return false, ErrFuncFail
+	}
+
+	return bool(ret), nil
 }
 
-// CallbackFriendMessage sets the function to be called when receiving a friend message.
-func (t *Tox) CallbackFriendMessage(f OnFriendMessage) {
-	if t.tox != nil {
-		t.onFriendMessage = f
-		C.set_callback_friend_message(t.tox, unsafe.Pointer(t))
+func (t *Tox) ConferenceSetTitle(conferenceNumber uint32, title string) (bool, error) {
+	if t.Toxcore == nil {
+		return false, ErrToxInit
 	}
+	var cTitle (*C.uint8_t)
+	if len(title) == 0 {
+		cTitle = nil
+	} else {
+		cTitle = (*C.uint8_t)(&[]byte(title)[0])
+	}
+	var toxErrConferenceTitle C.Tox_Err_Conference_Title
+	success := C.tox_conference_set_title(t.Toxcore, (C.uint32_t)(conferenceNumber), cTitle, (C.size_t)(len(title)), &toxErrConferenceTitle)
+	if !bool(success) || ToxErrConferenceTitle(toxErrConferenceTitle) != TOX_ERR_CONFERENCE_TITLE_OK {
+		return false, ErrFuncFail
+	}
+	return true, nil
 }
 
-// CallbackFileRecvControl sets the callback for file control requests.
-func (t *Tox) CallbackFileRecvControl(f OnFileRecvControl) {
-	if t.tox != nil {
-		t.onFileRecvControl = f
-		C.set_callback_file_recv_control(t.tox, unsafe.Pointer(t))
+func (t *Tox) ConferenceGetTitle(conferenceNumber uint32) (string, error) {
+	if t.Toxcore == nil {
+		return "", ErrToxInit
 	}
+	length, err := t.ConferenceGetTitleSize(conferenceNumber)
+	if err != nil {
+		return "", ErrFuncFail
+	}
+	title := make([]byte, length)
+	var toxErrConferenceTitle C.Tox_Err_Conference_Title
+	success := C.tox_conference_get_title(t.Toxcore, (C.uint32_t)(conferenceNumber), (*C.uint8_t)(&title[0]), &toxErrConferenceTitle)
+	if !bool(success) || ToxErrConferenceTitle(toxErrConferenceTitle) != TOX_ERR_CONFERENCE_TITLE_OK {
+		return "", ErrFuncFail
+	}
+
+	return string(title), nil
 }
 
-// CallbackFileChunkRequest sets the callback to be called when tox is ready to send more file data.
-func (t *Tox) CallbackFileChunkRequest(f OnFileChunkRequest) {
-	if t.tox != nil {
-		t.onFileChunkRequest = f
-		C.set_callback_file_chunk_request(t.tox, unsafe.Pointer(t))
+func (t *Tox) ConferenceGetTitleSize(conferenceNumber uint32) (int64, error) {
+	if t.Toxcore == nil {
+		return 0, ErrToxInit
 	}
+
+	var toxErrConferenceTitle C.Tox_Err_Conference_Title
+	ret := C.tox_conference_get_title_size(t.Toxcore, (C.uint32_t)(conferenceNumber), &toxErrConferenceTitle)
+	if ToxErrConferenceTitle(toxErrConferenceTitle) != TOX_ERR_CONFERENCE_TITLE_OK {
+		return 0, ErrFuncFail
+	}
+	return int64(ret), nil
 }
 
-// CallbackFileRecv sets the callback to be called when a file transfer request is received.
-func (t *Tox) CallbackFileRecv(f OnFileRecv) {
-	if t.tox != nil {
-		t.onFileRecv = f
-		C.set_callback_file_recv(t.tox, unsafe.Pointer(t))
+func (t *Tox) ConferencePeerNumberIsOurs(conferenceNumber, peerNumber uint32) (bool, error) {
+	if t.Toxcore == nil {
+		return false, ErrToxInit
 	}
+	var toxErrConferencePeerQuery C.Tox_Err_Conference_Peer_Query
+	ret := C.tox_conference_peer_number_is_ours(t.Toxcore, (C.uint32_t)(conferenceNumber), (C.uint32_t)(conferenceNumber), &toxErrConferencePeerQuery)
+	if !ret || ToxErrConferencePeerQuery(toxErrConferencePeerQuery) != TOX_ERR_CONFERENCE_PEER_QUERY_OK {
+		return false, ErrFuncFail
+	}
+	return bool(ret), nil
 }
 
-// CallbackFileRecvChunk sets the callback to be called when a file transfer request is received,
-// and subsequently when a chunk of file data for an accepted request was received.
-func (t *Tox) CallbackFileRecvChunk(f OnFileRecvChunk) {
-	if t.tox != nil {
-		t.onFileRecvChunk = f
-		C.set_callback_file_recv_chunk(t.tox, unsafe.Pointer(t))
+func (t *Tox) ConferencePeerCount(conferenceNumber uint32) (uint32, error) {
+	if t.Toxcore == nil {
+		return 0, ErrToxInit
 	}
+
+	var toxErrConferencePeerQuery C.Tox_Err_Conference_Peer_Query
+	ret := C.tox_conference_peer_count(t.Toxcore, (C.uint32_t)(conferenceNumber), &toxErrConferencePeerQuery)
+	if ToxErrConferencePeerQuery(toxErrConferencePeerQuery) != TOX_ERR_CONFERENCE_PEER_QUERY_OK {
+		return 0, ErrFuncFail
+	}
+	return uint32(ret), nil
 }
 
-// CallbackFriendLossyPacket sets the callback to be called when a lossy packet is received from a friend.
-func (t *Tox) CallbackFriendLossyPacket(f OnFriendLossyPacket) {
-	if t.tox != nil {
-		t.onFriendLossyPacket = f
-		C.set_callback_friend_lossy_packet(t.tox, unsafe.Pointer(t))
+// extra combined api
+func (t *Tox) ConferenceGetNames(conferenceNumber uint32) ([]string, error) {
+	if t.Toxcore == nil {
+		return nil, ErrToxInit
 	}
+
+	peerCount, err := t.ConferencePeerCount(conferenceNumber)
+	if err != nil {
+		return nil, ErrFuncFail
+	}
+	peerNames := make([]string, peerCount)
+	if peerCount == 0 {
+		return peerNames, nil
+	}
+
+	for idx := uint32(0); idx < math.MaxUint32; idx++ {
+		pname, err := t.ConferencePeerGetName(conferenceNumber, idx)
+		if err != nil {
+			break
+		}
+		peerNames[idx] = pname
+		if uint32(len(peerNames)) >= peerCount {
+			break
+		}
+	}
+
+	return peerNames, nil
 }
 
-// CallbackFriendLosslessPacket sets the callback to be called when a lossless packet is received from a friend.
-func (t *Tox) CallbackFriendLosslessPacket(f OnFriendLosslessPacket) {
-	if t.tox != nil {
-		t.onFriendLosslessPacket = f
-		C.set_callback_friend_lossless_packet(t.tox, unsafe.Pointer(t))
+func (t *Tox) ConferenceGetPeerPubkeys(conferenceNumber uint32) ([]string, error) {
+	if t.Toxcore == nil {
+		return nil, ErrToxInit
 	}
+
+	peerPubkeys := make([]string, 0)
+	peerCount, err := t.ConferencePeerCount(conferenceNumber)
+	if err != nil {
+		return nil, ErrFuncFail
+	}
+
+	for peerNumber := uint32(0); peerNumber < math.MaxUint32; peerNumber++ {
+		pubkey, err := t.ConferencePeerGetPublicKey(conferenceNumber, peerNumber)
+		if err != nil {
+			break
+		} else {
+			peerPubkeys = append(peerPubkeys, pubkey)
+		}
+		if uint32(len(peerPubkeys)) >= peerCount {
+			break
+		}
+	}
+	return peerPubkeys, nil
 }
 
-// CallbackFriendLosslessPacket sets the callback to be called when the client is invited to join a conference.
-func (t *Tox) CallbackConferenceInvite(f OnConferenceInvite) {
-	if t.tox != nil {
-		t.onConferenceInvite = f
-		C.set_callback_conference_invite(t.tox, unsafe.Pointer(t))
+// return [peerNumber]pubKey
+func (t *Tox) ConferenceGetPeers(conferenceNumber uint32) (map[uint32]string, error) {
+	if t.Toxcore == nil {
+		return nil, ErrToxInit
 	}
+
+	peers := make(map[uint32]string, 0)
+	peerCount, err := t.ConferencePeerCount(conferenceNumber)
+	if err != nil {
+		return nil, ErrFuncFail
+	}
+
+	for peerNumber := uint32(0); peerNumber < math.MaxUint32; peerNumber++ {
+		pubkey, err := t.ConferencePeerGetPublicKey(conferenceNumber, peerNumber)
+		if err != nil {
+			break
+		} else {
+			peers[peerNumber] = pubkey
+		}
+		if uint32(len(peers)) >= peerCount {
+			break
+		}
+	}
+
+	return peers, nil
 }
 
-// CallbackFriendLosslessPacket sets the callback to be called when the client receives a conference message.
-func (t *Tox) CallbackConferenceMessage(f OnConferenceMessage) {
-	if t.tox != nil {
-		t.onConferenceMessage = f
-		C.set_callback_conference_message(t.tox, unsafe.Pointer(t))
+// ConferenceGetChatlistSize
+func (t *Tox) ConferenceGetChatlistSize() (uint32, error) {
+	if t.Toxcore == nil {
+		return 0, ErrToxInit
 	}
+	ret := C.tox_conference_get_chatlist_size(t.Toxcore)
+	return uint32(ret), nil
 }
 
-// CallbackConferenceConnected sets the callback to be called when the client successfully connects to a conference
-// after joining it with the tox_conference_join function.
-func (t *Tox) CallbackConferenceConnected(f OnConferenceConnected) {
-	if t.tox != nil {
-		t.onConferenceConnected = f
-		C.set_callback_conference_connected(t.tox, unsafe.Pointer(t))
+func (t *Tox) ConferenceGetChatlist() ([]uint32, error) {
+	if t.Toxcore == nil {
+		return nil, ErrToxInit
 	}
+
+	size, err := t.ConferenceGetChatlistSize()
+	if err != nil {
+		return nil, err
+	}
+
+	chatList := make([]uint32, size)
+
+	if size > 0 {
+		C.tox_conference_get_chatlist(t.Toxcore, (*C.uint32_t)(&chatList[0]))
+	}
+
+	return chatList, nil
+}
+
+func (t *Tox) ConferenceGetType(conferenceNumber uint32) (int, error) {
+	if t.Toxcore == nil {
+		return 0, ErrToxInit
+	}
+
+	var toxErrConferenceGetType C.Tox_Err_Conference_Get_Type
+	ret := C.tox_conference_get_type(t.Toxcore, (C.uint32_t)(conferenceNumber), &toxErrConferenceGetType)
+	if ToxErrConferenceGetType(toxErrConferenceGetType) != TOX_ERR_CONFERENCE_GET_TYPE_OK {
+		return int(ret), ErrFuncFail
+	}
+
+	return int(ret), nil
+}
+
+func (t *Tox) ConferenceGetIdentifier(conferenceNumber uint32) (string, error) {
+	if t.Toxcore == nil {
+		return "", ErrToxInit
+	}
+
+	idbuf := [1 + C.TOX_PUBLIC_KEY_SIZE]byte{}
+
+	C.tox_conference_get_id(t.Toxcore, (C.uint32_t)(conferenceNumber), (*C.uint8_t)(&idbuf[0]))
+
+	identifier := strings.ToUpper(hex.EncodeToString(idbuf[:]))
+	identifier = identifier[2:] // 1B(type)+32B(identifier)
+
+	return identifier, nil
 }
