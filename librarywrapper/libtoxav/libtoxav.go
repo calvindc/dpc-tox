@@ -3,6 +3,7 @@ package libtoxav
 //#cgo LDFLAGS: -ltoxcore
 //#include <tox/toxav.h>
 //#include <vpx/vpx_image.h>
+//#include <stdlib.h>
 import "C"
 
 import (
@@ -13,7 +14,7 @@ import (
 )
 
 type ToxAV struct {
-	tox   libtox.Tox
+	tox   *libtox.Tox
 	toxav *C.ToxAV
 	mtx   sync.Mutex
 
@@ -25,19 +26,17 @@ type ToxAV struct {
 	in_width   uint16
 	in_height  uint16
 
-	// Callbacks
-	onCall         OnCall
-	onCallUserData unsafe.Pointer
+	// A/V Callbacks
+	onCall              OnCall
+	onAudioReceiveFrame OnAudioReceiveFrame
+	onCallState         OnCallState
 }
 
-/**
- * Start new A/V session. There can only be only one session per Tox instance.
- * ToxAV *toxav_new(Tox *tox, Toxav_Err_New *error);
- */
+// NewToxAVStart new A/V session. There can only be only one session per Tox instance.
 func NewToxAV(tox *libtox.Tox) (*ToxAV, error) {
 	var cToxAV *C.ToxAV
 	var toxAVErrNew C.TOXAV_ERR_NEW
-	cToxAV = C.toxav_new(tox.Toxcore, &toxAVErrNew)
+	cToxAV = C.toxav_new((*C.Tox)(tox.Toxcore), &toxAVErrNew)
 	if cToxAV == nil || ToxavErrNew(toxAVErrNew) != TOXAV_ERR_NEW_OK {
 		switch ToxavErrNew(toxAVErrNew) {
 		case TOXAV_ERR_NEW_NULL:
@@ -52,7 +51,7 @@ func NewToxAV(tox *libtox.Tox) (*ToxAV, error) {
 		}
 		return nil, ErrUnknown
 	}
-	tav := &ToxAV{tox: tox.Toxcore, toxav: cToxAV}
+	tav := &ToxAV{tox: tox, toxav: cToxAV}
 
 	return tav, nil
 }
@@ -71,7 +70,7 @@ func (tav *ToxAV) Kill() {
  * Returns the Tox instance the A/V object was created for.
  */
 func (tav *ToxAV) GetTox() *libtox.Tox {
-	return tav.toxav
+	return tav.tox
 }
 
 /**
@@ -119,8 +118,37 @@ func (tav *ToxAV) Call(friendNumber uint32, audioBitRate uint32, videoBitRate ui
 func (tav *ToxAV) Answer(friendNumber uint32, audioBitRate uint32, videoBitRate uint32) (bool, error) {
 	var toxavErrAnswer C.TOXAV_ERR_ANSWER
 	ret := C.toxav_answer(tav.toxav, C.uint32_t(friendNumber), C.uint32_t(audioBitRate), C.uint32_t(videoBitRate), &toxavErrAnswer)
-	if ToxavErrAnswer(toxavErrAnswer) != TOXAV_ERR_ANSWER_OK {
-		return bool(ret), errors.New(string(toxavErrAnswer))
+	switch ToxavErrAnswer(toxavErrAnswer) {
+	case TOXAV_ERR_ANSWER_OK:
+		return bool(ret), nil
+	case TOXAV_ERR_ANSWER_SYNC:
+		return false, ErrAnswerSync
+	case TOXAV_ERR_ANSWER_CODEC_INITIALIZATION:
+		return false, ErrAnswerCodecInitialzation
+	case TOXAV_ERR_ANSWER_FRIEND_NOT_FOUND:
+		return false, ErrAnswerFriendNotFound
+	case TOXAV_ERR_ANSWER_FRIEND_NOT_CALLING:
+		return false, ErrAnswerFriendNotCalling
+	case TOXAV_ERR_ANSWER_INVALID_BIT_RATE:
+		return false, ErrAnswerInvalidBitRate
+	default:
+		return false, ErrFuncFail
+	}
+	return bool(ret), ErrUnknown
+}
+
+func (tav *ToxAV) AudioSendFrame(friendNumber uint32, pcm []byte, sampleCount int, channels int, samplingRate int) (bool, error) {
+	pcmx := (*C.int16_t)(unsafe.Pointer(&pcm[0]))
+	var toxavErrSendFrame C.Toxav_Err_Send_Frame
+	/*var cPcm (*C.int16_t)
+	if len(pcm) == 0 {
+		cPcm = nil
+	} else {
+		cPcm = (*C.int16_t)(&[]byte(pcm)[0])
+	}*/
+	ret := C.toxav_audio_send_frame(tav.toxav, C.uint32_t(friendNumber), pcmx, C.size_t(sampleCount), C.uint8_t(channels), C.uint32_t(samplingRate), &toxavErrSendFrame)
+	if toxavErrSendFrame != C.TOXAV_ERR_SEND_FRAME_OK {
+		return false, errors.New(string(toxavErrSendFrame)) //todo
 	}
 	return bool(ret), nil
 }

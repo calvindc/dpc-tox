@@ -6,7 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"github.com/calvindc/dpc-tox/librarywrapper/libtox"
+	"github.com/calvindc/dpc-tox/librarywrapper/libtoxav"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"os/signal"
 	"strings"
@@ -99,6 +101,8 @@ func main() {
 	tox.CallbackFileChunkRequest(onFileChunkRequest)
 	tox.CallbackFileRecv(onFileRecv)
 	tox.CallbackFileRecvChunk(onFileRecvChunk)
+	tox.CallbackFriendTypingChanges(onFriendTypingChanges)
+	tox.CallbackFriendReadReceipt(onFriendReadReceipt)
 
 	tox.CallbackConferenceInvite(onConferenceInvite)
 	tox.CallbackConferenceConnected(onConferenceConnected)
@@ -121,8 +125,38 @@ func main() {
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
-	ticker := time.NewTicker(25 * time.Millisecond)
+	ticker := time.NewTicker(50 * time.Millisecond)
 
+	//audio/video
+	toxav, errav := libtoxav.NewToxAV(tox)
+	if err != nil {
+		panic(errav)
+	}
+	toxav.CallbackCall(onCall)
+	toxav.CallbackAudioReceiveFrame(onAudioReceiveFrame)
+	toxav.CallbackCallState(onCallState)
+	go func() {
+		shutdown := false
+		var loopc uint32 = 0
+		var itval uint32 = 0
+		for !shutdown {
+			iv := toxav.IterationInterval()
+			if iv != itval {
+				if iv-itval > 20 || itval-iv > 20 {
+					fmt.Println("av iteration interval changed:", itval, iv, iv-itval, itval-iv)
+				}
+				itval = iv
+			}
+			toxav.Iterate()
+			loopc += 1
+			time.Sleep(1000 * 50 * time.Microsecond)
+		}
+		toxav.Kill()
+	}()
+
+	/*go func(){
+
+	}*/
 	for isRunning {
 		select {
 		case <-c:
@@ -137,6 +171,37 @@ func main() {
 			tox.Iterate()
 		}
 	}
+
+}
+
+// onCall
+func onCall(tav *libtoxav.ToxAV, friendnumber uint32, audioenabled bool, videoenabled bool) {
+	msg := fmt.Sprintf("callback onCall from [%d], audioenabled=[%v], videoenabled=[%v]", friendnumber, audioenabled, videoenabled)
+	fmt.Println(msg)
+	var audioBitRate uint32 = 48
+	var videoBitRate uint32 = 64
+	ret, err := tav.Answer(friendnumber, audioBitRate, videoBitRate)
+	if err != nil {
+		fmt.Println(fmt.Sprintf("AV answer err=%v,ret=%v", err, ret))
+	}
+}
+
+// onAudioReceiveFrame
+func onAudioReceiveFrame(tav *libtoxav.ToxAV, friendnumber uint32, pcm []byte, samplecount int, channels int, samplingrate int) {
+	if rand.Int()%23 == 3 {
+		msg := fmt.Sprintf("callback onAudioReceiveFrame friendnumber=[%d] len(pcm)=[%d] samplecount=[%d] channels=[%d] samplingrate=[%d]", friendnumber, len(pcm), samplecount, channels, samplingrate)
+		fmt.Println(msg)
+	}
+	ret, err := tav.AudioSendFrame(friendnumber, pcm, samplecount, channels, samplingrate)
+	if err != nil {
+		fmt.Println(fmt.Sprintf("AudioSendFrame err=%v, ret=%v", err, ret))
+	}
+}
+
+// onCallState
+func onCallState(tav *libtoxav.ToxAV, friendnumber uint32, state uint32) {
+	fmt.Println(fmt.Sprintf("callback onCallState friendnumber=[%d] state=[%d]", friendnumber, state))
+	return
 }
 
 func onFriendRequest(t *libtox.Tox, publicKey []byte, message []byte, length uint32) {
@@ -210,7 +275,7 @@ func onFriendMessage(t *libtox.Tox, friendNumber uint32, messagetype libtox.ToxM
 		for _, theGp := range myAllGroup {
 			ret, err := t.ConferenceInvite(friendNumber, theGp)
 			if err != nil {
-				fmt.Println(fmt.Sprintf("ConferenceInvite invite [%d] into [%d] failed,err=%t,ret=%t", friendNumber, theGp, err, ret))
+				fmt.Println(fmt.Sprintf("ConferenceInvite invite [%d] into [%d] failed,err=%v,ret=%v", friendNumber, theGp, err, ret))
 			}
 			fmt.Println(fmt.Sprintf("ConferenceInvite invite [%d] into [%d] success,ret=%v", friendNumber, theGp, ret))
 		}
@@ -223,7 +288,7 @@ func onFriendMessage(t *libtox.Tox, friendNumber uint32, messagetype libtox.ToxM
 			var groupPeersInfo = make(map[uint32]string)
 			groupPeersInfo, err := t.ConferenceGetPeers(theGp)
 			if err != nil {
-				fmt.Println(fmt.Sprintf("ConferenceGetPeers failed, groupdNumber=%t, err=%v", theGp, err))
+				fmt.Println(fmt.Sprintf("ConferenceGetPeers failed, groupdNumber=%v, err=%v", theGp, err))
 			}
 			for peerNumber, pubKey := range groupPeersInfo {
 				fmt.Println(fmt.Sprintf("ConferenceGetPeers groupNubmber=%d, peerNumber=%d,peerPubkey=%s", theGp, peerNumber, pubKey))
@@ -249,7 +314,7 @@ func onFileRecv(t *libtox.Tox, friendNumber uint32, fileNumber uint32, kind libt
 		publicKey, _ := t.FriendGetPublickey(friendNumber)
 		file, err := os.Create("./testdata/file_recv_" + hex.EncodeToString(publicKey) + ".png")
 		if err != nil {
-			fmt.Println("[ERROR] Error creating file", "test_"+hex.EncodeToString(publicKey)+".png")
+			fmt.Println("[ERROR] Error creating file", "file_recv_"+hex.EncodeToString(publicKey)+".png")
 		}
 
 		// append the file to the map of active file transfers
@@ -317,6 +382,17 @@ func onFileChunkRequest(t *libtox.Tox, friendNumber uint32, fileNumber uint32, p
 
 	// send the requested data
 	t.FileSendChunk(friendNumber, fileNumber, position, data)
+}
+
+func onFriendReadReceipt(t *libtox.Tox, friendnumber uint32, messageid uint32) {
+	msg := fmt.Sprintf("callback onFriendReadReceipt friendnumber:[%d], messageid[%d]", friendnumber, messageid)
+	fmt.Println(msg)
+}
+
+func onFriendTypingChanges(t *libtox.Tox, friendnumber uint32, istyping bool) {
+	msg := fmt.Sprintf("callback onFriendTypingChanges friendnumber:[%d], istyping=[%v]", friendnumber, istyping)
+	fmt.Println(msg)
+	//t.FriendSendMessage(friendnumber, libtox.TOX_MESSAGE_TYPE_NORMAL, []byte("i got a "+msg))
 }
 
 func onFileRecvChunk(t *libtox.Tox, friendNumber uint32, fileNumber uint32, position uint64, data []byte, length uint32) {

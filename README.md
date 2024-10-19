@@ -27,7 +27,7 @@ See [bindings.go](bindings.go) for details about supported API functions and [ca
 The best place to get started are the test in [cmd/](cmd/).
 
 ```
-go run ...
+GODEBUG=cgocheck=0 go run cmd/dpc-tox/test.go
 ```
 
 Feel free to ask for help in the issue tracker. ;)
